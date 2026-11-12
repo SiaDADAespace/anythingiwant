@@ -1,0 +1,1013 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>픽셀 기입 타이밍 랩</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: oscilloscope-style timing lanes as the hero, circuit + live probe below, parameter rack at right */
+:root{
+  --bg:#eef1f4; --surface:#fbfcfd; --surface2:#f3f6f9; --ink:#131d27; --muted:#56646f; --faint:#8995a1;
+  --line:#d4dbe2; --grid:#e4e9ee; --accent:#2350c2; --accent-ink:#ffffff;
+  --g:#bf7300; --g2:#8a4bc6; --em:#0a8572; --d:#2160d6; --px:#cc2257; --cur:#4b7a0c;
+  --good:#1c8549; --warn:#a96d07; --bad:#c13030;
+  --good-bg:#e1f2e8; --warn-bg:#f9eed8; --bad-bg:#f9e3e3;
+  --band-w:rgba(33,96,214,.075); --band-k:rgba(204,34,87,.07); --band-i:rgba(138,75,198,.08); --band-e:rgba(10,133,114,.07);
+  --f-sans:"IBM Plex Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c1116; --surface:#131a22; --surface2:#18212b; --ink:#e3e9ef; --muted:#9aa8b5; --faint:#6c7a88;
+  --line:#25303c; --grid:#1c2630; --accent:#7ea4ff; --accent-ink:#0c1116;
+  --g:#f2a93c; --g2:#bb90f3; --em:#38c9b0; --d:#72a0ff; --px:#ff6190; --cur:#a5d85c;
+  --good:#52cb88; --warn:#f1b24c; --bad:#ff6e6e;
+  --good-bg:rgba(82,203,136,.13); --warn-bg:rgba(241,178,76,.13); --bad-bg:rgba(255,110,110,.13);
+  --band-w:rgba(114,160,255,.11); --band-k:rgba(255,97,144,.10); --band-i:rgba(187,144,243,.11); --band-e:rgba(56,201,176,.09);
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c1116; --surface:#131a22; --surface2:#18212b; --ink:#e3e9ef; --muted:#9aa8b5; --faint:#6c7a88;
+  --line:#25303c; --grid:#1c2630; --accent:#7ea4ff; --accent-ink:#0c1116;
+  --g:#f2a93c; --g2:#bb90f3; --em:#38c9b0; --d:#72a0ff; --px:#ff6190; --cur:#a5d85c;
+  --good:#52cb88; --warn:#f1b24c; --bad:#ff6e6e;
+  --good-bg:rgba(82,203,136,.13); --warn-bg:rgba(241,178,76,.13); --bad-bg:rgba(255,110,110,.13);
+  --band-w:rgba(114,160,255,.11); --band-k:rgba(255,97,144,.10); --band-i:rgba(187,144,243,.11); --band-e:rgba(56,201,176,.09);
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-sans);font-size:14px;line-height:1.55}
+.wrap{max-width:1440px;margin:0 auto;padding-block:22px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px 24px}
+.brand{min-width:0}
+.brand h1{margin:0;font-size:clamp(20px,2.6vw,27px);font-weight:700;letter-spacing:-.02em;text-wrap:balance}
+.brand p{margin:2px 0 0;color:var(--muted);font-family:var(--f-mono);font-size:12px;letter-spacing:.01em}
+.hdr-ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.seg{display:inline-flex;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{appearance:none;border:0;background:transparent;color:var(--muted);font:600 13px var(--f-sans);padding:7px 12px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.seg button[aria-selected="true"],.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 0 var(--line),0 0 0 1px var(--line)}
+.seg button:focus-visible,select:focus-visible,input:focus-visible,.btn:focus-visible,canvas:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select{font:500 13px var(--f-sans);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:7px 10px;max-width:100%}
+.preset{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;min-width:0}
+.preset select{min-width:0;max-width:280px}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:10px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px 13px 12px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.kl{display:flex;justify-content:space-between;align-items:center;gap:6px;color:var(--muted);font-size:12px;font-weight:500}
+.kv{font-family:var(--f-mono);font-size:21px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kv small{font-size:12px;color:var(--muted);font-weight:500;margin-left:4px}
+.ks{color:var(--faint);font-size:11.5px;font-family:var(--f-mono);line-height:1.4}
+.pill{font:600 10.5px var(--f-sans);padding:1px 7px;border-radius:99px;letter-spacing:.02em;white-space:nowrap}
+.pill.good{color:var(--good);background:var(--good-bg)} .pill.warn{color:var(--warn);background:var(--warn-bg)} .pill.bad{color:var(--bad);background:var(--bad-bg)}
+.kpi.bad .kv{color:var(--bad)} .kpi.warn .kv{color:var(--warn)}
+
+.lab{display:grid;grid-template-columns:minmax(0,1fr) 344px;grid-template-areas:"scope ctl" "circ ctl";gap:16px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;min-width:0}
+.scope{grid-area:scope;padding:12px 12px 10px}
+.circ{grid-area:circ;padding:14px;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px}
+.ctl{grid-area:ctl;padding:6px 14px 14px;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.tb-l{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface2);color:var(--ink);font:600 13px var(--f-sans);padding:7px 13px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.btn:hover{border-color:var(--faint)}
+.btn svg{width:12px;height:12px;fill:currentColor}
+.tread{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tread b{color:var(--ink);font-weight:600}
+.cv-wrap{width:100%;overflow:hidden}
+canvas#scope{display:block;width:100%;touch-action:none;cursor:ew-resize;border-radius:6px}
+.hint{color:var(--faint);font-size:11.5px;margin:6px 2px 0}
+
+.circ h2,.ctl h2{margin:0;font-size:14px;font-weight:700;letter-spacing:-.01em}
+.circ-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+.circ-head span{font:500 11.5px var(--f-mono);color:var(--muted)}
+.svgwrap{width:100%;overflow-x:auto}
+.svgwrap svg{display:block;width:100%;min-width:300px;height:auto;max-height:400px}
+.w{stroke:var(--ink);stroke-width:1.35;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.w.dash{stroke-dasharray:3 3;stroke:var(--faint)}
+.bus{stroke-width:2}
+.chn{stroke:var(--ink);stroke-width:3;fill:none}
+.gp{stroke:var(--ink);stroke-width:1.6;fill:none}
+.bub{fill:var(--surface);stroke:var(--ink);stroke-width:1.3}
+.plate{stroke:var(--ink);stroke-width:2.4;fill:none}
+.cap.dashc .plate{stroke:var(--faint)}
+.dio{fill:var(--surface);stroke:var(--ink);stroke-width:1.4}
+.ray{stroke:var(--faint);stroke-width:1.2;fill:none}
+.node{fill:var(--ink)}
+.tl{font:600 10.5px var(--f-mono);fill:var(--muted)}
+.rl{font:600 11px var(--f-mono);fill:var(--ink)}
+.val{font:600 11px var(--f-mono);fill:var(--px)}
+.val.i{fill:var(--cur)} .val.g{fill:var(--g)} .val.d{fill:var(--d)}
+.tft .w,.tft .chn,.tft .gp,.tft .bub{transition:stroke .15s}
+.tft.on .w,.tft.on .chn,.tft.on .gp,.tft.on .bub{stroke:var(--accent)}
+.tft.on .chn{stroke-width:4}
+.tft.on .tl{fill:var(--accent)}
+.tft.ox .chn{stroke-dasharray:5 2}
+#oled .dio{transition:fill .15s}
+
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.phase{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.phase .pt{font-weight:700;font-size:14px;margin-bottom:3px;display:flex;gap:8px;align-items:center}
+.phase .pt i{width:9px;height:9px;border-radius:2px;display:inline-block;background:var(--accent);flex:none}
+.phase p{margin:0;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ro{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums;margin:0}
+.ro dt{color:var(--muted)} .ro dd{margin:0;text-align:right;font-weight:500}
+.ro .sw{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+
+fieldset{border:0;border-top:1px solid var(--line);margin:0;padding:12px 0 6px;display:flex;flex-direction:column;gap:10px}
+fieldset:first-of-type{border-top:0}
+legend{font:700 11.5px var(--f-sans);color:var(--muted);letter-spacing:.06em;padding:0 0 2px;float:left;width:100%}
+.c-row{display:flex;flex-direction:column;gap:3px}
+.c-row label{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--ink)}
+.c-row output{font-family:var(--f-mono);font-size:12px;color:var(--accent);font-variant-numeric:tabular-nums;white-space:nowrap}
+input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0}
+.c-row select{width:100%}
+.c-chk{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.c-chk input{accent-color:var(--accent);margin-top:3px}
+.ctl-head{display:flex;justify-content:space-between;align-items:center;padding:10px 0 4px;position:sticky;top:-6px;background:var(--surface);z-index:1}
+.ctl-head button{font-size:12px;padding:5px 10px}
+
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.notes-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:6px}
+.notes-h h2{margin:0;font-size:17px;letter-spacing:-.01em}
+.notes-h p{margin:0;color:var(--muted);font-size:12.5px}
+.note{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 15px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.note h3{margin:0;font-size:14px;font-weight:700}
+.eq{font-family:var(--f-mono);font-size:13px;background:var(--surface2);border-radius:7px;padding:8px 10px;overflow-x:auto;white-space:nowrap;color:var(--ink)}
+.num{font-family:var(--f-mono);font-size:12px;color:var(--accent);line-height:1.55}
+.note p{margin:0;color:var(--muted);font-size:12.8px;line-height:1.65;max-width:68ch}
+sub,sup{font-size:.72em}
+
+@media (max-width:1080px){
+  .lab{grid-template-columns:minmax(0,1fr);grid-template-areas:"scope" "circ" "ctl"}
+  .ctl{position:static;max-height:none}
+}
+@media (max-width:720px){
+  .circ{grid-template-columns:minmax(0,1fr)}
+  .kv{font-size:18px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>픽셀 기입 타이밍 랩</h1>
+      <p>Storage capacitor write · kickback · Vth compensation · hold — TFT 모델 기반 과도응답</p>
+    </div>
+    <div class="hdr-ctl">
+      <div class="seg" role="tablist" aria-label="화소 회로" id="modeTabs">
+        <button role="tab" data-mode="lcd" id="tab-lcd">LCD 1T1C</button>
+        <button role="tab" data-mode="o2" id="tab-o2">OLED 2T1C</button>
+        <button role="tab" data-mode="o7" id="tab-o7">OLED 7T1C</button>
+      </div>
+      <label class="preset" for="preset">프리셋 <select id="preset"></select></label>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis" aria-live="polite"></section>
+
+  <main class="lab">
+    <section class="scope card" aria-label="타이밍 다이어그램">
+      <div class="toolbar">
+        <div class="tb-l">
+          <div class="seg" aria-label="시간 범위">
+            <button id="v-line" aria-pressed="true">1H 확대</button>
+            <button id="v-frame" aria-pressed="false">프레임 전체</button>
+          </div>
+          <button class="btn" id="play" aria-pressed="false"><svg viewBox="0 0 12 12" id="playIcon"><path d="M2 1l9 5-9 5z"/></svg><span>재생</span></button>
+        </div>
+        <div class="tread" id="tread"></div>
+      </div>
+      <div class="cv-wrap"><canvas id="scope" tabindex="0" aria-label="타이밍 파형. 좌우 화살표로 커서 이동"></canvas></div>
+      <p class="hint">파형 위를 드래그하거나 ← → 키로 커서를 옮기면 아래 회로의 ON 상태와 노드 전압이 따라 바뀝니다. Shift+화살표는 5배 이동.</p>
+    </section>
+
+    <section class="circ card" aria-label="화소 회로와 프로브">
+      <div style="min-width:0">
+        <div class="circ-head"><h2>화소 회로</h2><span id="circTag"></span></div>
+        <div class="svgwrap" id="schem"></div>
+      </div>
+      <div class="side">
+        <div class="phase" id="phase"></div>
+        <dl class="ro" id="readout"></dl>
+      </div>
+    </section>
+
+    <aside class="ctl card" id="ctl" aria-label="파라미터"></aside>
+  </main>
+
+  <div class="notes-h"><h2>해석 노트</h2><p>현재 파라미터 값을 대입한 해석식. 시뮬레이션은 RK4 과도해석이며 아래 식은 1차 근사입니다.</p></div>
+  <section class="notes" id="notes"></section>
+</div>
+
+<script>
+"use strict";
+/* ───────── physical constants & device helpers ───────── */
+const COX_LCD = 1.55e-8;   // F/cm²  SiNx 400 nm (a-Si / IGZO BCE)
+const COX_OLED = 2.88e-8;  // F/cm²  SiO2 120 nm (LTPS)
+const ELVSS = -2.5, NVT = 0.13;              // SS ≈ 0.3 V/dec
+const B_SW = 80*COX_OLED*1.0, VTH_SW = 1.5;  // LTPS p-type switch (W/L=1)
+const B_OX = 10*COX_OLED*1.5, VTH_OX = 0.8;  // IGZO n-type switch (W/L=1.5)
+
+const softplus = x => x > 3 ? x : NVT*Math.log1p(Math.exp(x/NVT));
+const smooth = x => { x = Math.min(1, Math.max(0, x)); return x*x*(3-2*x); };
+const el = x => Math.max(0.03, x*(2-x));      // Elmore fraction along distributed RC line
+
+function rc(t, init, edges, tau){            // first-order filtered step train → [v, dv/dt]
+  let v = init, tgt = init, tl = null;
+  for (const e of edges){
+    if (e[0] > t) break;
+    if (tl !== null) v = tgt + (v - tgt)*Math.exp(-(e[0]-tl)/tau);
+    tgt = e[1]; tl = e[0];
+  }
+  if (tl === null) return [init, 0];
+  const val = tgt + (v - tgt)*Math.exp(-(t - tl)/tau);
+  return [val, (tgt - val)/tau];
+}
+function tftN(vg, va, vb, beta, vth, goff){  // current flowing INTO node b
+  const hi = Math.max(va, vb), lo = Math.min(va, vb), vds = hi - lo;
+  const vov = softplus(vg - lo - vth);
+  let i = goff*vds + (vds < vov ? beta*(vov*vds - 0.5*vds*vds) : 0.5*beta*vov*vov);
+  return va > vb ? i : -i;
+}
+function tftP(vg, va, vb, beta, vth, goff){  // vth = |Vth|
+  const hi = Math.max(va, vb), lo = Math.min(va, vb), vds = hi - lo;
+  const vov = softplus(hi - vg - vth);
+  let i = goff*vds + (vds < vov ? beta*(vov*vds - 0.5*vds*vds) : 0.5*beta*vov*vov);
+  return va > vb ? i : -i;
+}
+function integrate(f, X, tA, tB, N, rec){    // RK4, stiffness-adaptive substeps
+  const dt = (tB - tA)/N; let t = tA; rec(t, X);
+  for (let k = 0; k < N; k++){
+    const stiff = tt => { const f0 = f(tt, X); return Math.abs((f(tt, X + 1e-3) - f0)/1e-3); };
+    const g = Math.max(stiff(t), stiff(t + dt));
+    const ns = Math.min(400, Math.max(1, Math.ceil(dt*g/1.0))), h = dt/ns;
+    for (let s = 0; s < ns; s++){
+      const k1 = f(t, X), k2 = f(t+h/2, X+h/2*k1), k3 = f(t+h/2, X+h/2*k2), k4 = f(t+h, X+h*k3);
+      X += h/6*(k1 + 2*k2 + 2*k3 + k4); t += h;
+    }
+    t = tA + (k+1)*dt; rec(t, X);
+  }
+  return X;
+}
+function timing(p, smin = 60){
+  const scanF = p.fr >= 60 ? p.fr : smin;
+  const H = 1/(scanF*(p.rows + p.vbl)), Tf = 1/p.fr;
+  const ton = p.setup*1e-6, toff = Math.max(ton + 0.1*H, H - p.oe*1e-6);
+  return {scanF, H, Tf, ton, toff, skip: p.fr < 60};
+}
+function at(t, T, A){                         // linear interpolation on sorted T
+  if (t <= T[0]) return A[0];
+  const n = T.length; if (t >= T[n-1]) return A[n-1];
+  let lo = 0, hi = n-1;
+  while (hi - lo > 1){ const m = (lo+hi) >> 1; if (T[m] <= t) lo = m; else hi = m; }
+  const u = (t - T[lo])/(T[hi] - T[lo] || 1);
+  return A[lo] + (A[hi] - A[lo])*u;
+}
+
+/* ───────── formatting ───────── */
+const fx = (v, d=2) => Number.isFinite(v) ? v.toFixed(d) : '—';
+const sg = (v, d=2) => !Number.isFinite(v) ? '—' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(d);
+function si(v, u, d=2){
+  if (!Number.isFinite(v)) return '—';
+  const a = Math.abs(v);
+  const P = [[1e-18,'a'],[1e-15,'f'],[1e-12,'p'],[1e-9,'n'],[1e-6,'µ'],[1e-3,'m'],[1,''],[1e3,'k'],[1e6,'M']];
+  let s = P[0]; for (const q of P) if (a >= q[0]*0.9995) s = q;
+  if (a === 0) s = [1, ''];
+  const x = v/s[0], dd = Math.abs(x) >= 100 ? Math.max(0, d-2) : Math.abs(x) >= 10 ? Math.max(0, d-1) : d;
+  return x.toFixed(dd) + ' ' + s[1] + u;
+}
+const pct = (v, d=1) => Number.isFinite(v) ? (v*100).toFixed(d) : '—';
+const sgPct = (v, d=1) => Number.isFinite(v) ? (v >= 0 ? '+' : '−') + Math.abs(v*100).toFixed(d) : '—';
+const exp10 = v => { const m = Math.pow(10, v); return si(m, 'A', 1); };
+const grade = (x, g, w) => x <= g ? 'good' : x <= w ? 'warn' : 'bad';
+
+/* ───────── parameter definitions ───────── */
+const DEF = {
+  fr:{l:'리프레시율', u:'Hz', min:1, max:240, step:1},
+  rows:{l:'활성 행 수 N', u:'rows', min:480, max:4320, step:10},
+  vbl:{l:'수직 블랭킹', u:'lines', min:0, max:200, step:2},
+  setup:{l:'데이터 셋업 (게이트 ON 지연)', u:'µs', min:0, max:1.5, step:0.05},
+  oe:{l:'게이트 OFF 마진 (OE)', u:'µs', min:0, max:2, step:0.05},
+  gx:{l:'게이트 라인 위치 (근단→원단)', u:'', min:0, max:1, step:0.01, f:v=>Math.round(v*100)+' %'},
+  tgFar:{l:'게이트 라인 RC τ (원단)', u:'µs', min:0.05, max:4, step:0.05},
+  dy:{l:'데이터 라인 위치 (근단→원단)', u:'', min:0, max:1, step:0.01, f:v=>Math.round(v*100)+' %'},
+  tdFar:{l:'데이터 라인 RC τ (원단)', u:'µs', min:0.05, max:3, step:0.05},
+  pattern:{l:'인접 행 데이터', type:'sel', o:[['same','동일 계조'],['black','블랙'],['white','화이트']]},
+  ioff:{l:'스위치 Ioff (@10 V)', u:'', min:-17, max:-10, step:0.1, f:exp10},
+  // LCD
+  mu_l:{k:'mu', l:'이동도 µ', u:'cm²/V·s', min:0.2, max:30, step:0.1},
+  wl_l:{k:'wl', l:'TFT W/L', u:'', min:0.5, max:30, step:0.1},
+  vth_l:{k:'vth', l:'TFT Vth', u:'V', min:-1, max:4, step:0.05},
+  cst_l:{k:'cst', l:'Cst', u:'pF', min:0.03, max:1.5, step:0.01},
+  clc:{l:'Clc (블랙, ε⊥)', u:'pF', min:0.03, max:1.2, step:0.01},
+  clcR:{l:'Clc 최대/최소 비 (ε∥/ε⊥)', u:'×', min:1, max:2.5, step:0.05},
+  cgs_l:{k:'cgs', l:'Cgs (게이트-화소 기생)', u:'fF', min:2, max:100, step:1},
+  tlc:{l:'액정 응답 시정수', u:'ms', min:1, max:20, step:0.5},
+  dynC:{l:'동적 커패시턴스 (액정 재배향 중 Clc 변화)', type:'chk'},
+  vgh_l:{k:'vgh', l:'VGH', u:'V', min:10, max:35, step:0.5},
+  vgl_l:{k:'vgl', l:'VGL', u:'V', min:-15, max:0, step:0.5},
+  vcom:{l:'Vcom', u:'V', min:3, max:10, step:0.01},
+  vgray:{l:'계조 전압 |Vdata − Vcom|', u:'V', min:0, max:6, step:0.05},
+  prevGray:{l:'이전 프레임 계조 전압', u:'V', min:0, max:6, step:0.05},
+  pol:{l:'표시 극성 (현재 프레임)', type:'sel', o:[['pos','정극성 (+)'],['neg','부극성 (−)']]},
+  inv:{l:'인버전 방식', type:'sel', o:[['column','컬럼 인버전'],['dot','도트 인버전']]},
+  // OLED
+  mu_o:{k:'mu', l:'DT 이동도 µ', u:'cm²/V·s', min:5, max:150, step:1},
+  wl_o:{k:'wl', l:'DT W/L', u:'', min:0.05, max:1, step:0.01},
+  vth_o:{k:'vth', l:'DT |Vth| (p-type)', u:'V', min:0.5, max:4, step:0.05},
+  cst_o:{k:'cst', l:'Cst', u:'fF', min:20, max:400, step:5},
+  cdt:{l:'DT 게이트-소스 C', u:'fF', min:0, max:60, step:1},
+  cgs_o:{k:'cgs', l:'스위치 Cgs (T2/T3/T4)', u:'fF', min:0.2, max:12, step:0.1},
+  vgh_o:{k:'vgh', l:'VGH', u:'V', min:3, max:12, step:0.1},
+  vgl_o:{k:'vgl', l:'VGL', u:'V', min:-12, max:-2, step:0.1},
+  elvdd:{l:'ELVDD', u:'V', min:3, max:8, step:0.05},
+  vdata:{l:'Vdata (현재 계조)', u:'V', min:-1, max:7, step:0.01},
+  vprevF:{l:'이전 프레임 Vdata', u:'V', min:-1, max:7, step:0.01},
+  vinit:{l:'Vinit', u:'V', min:-6, max:0, step:0.05},
+  tech:{l:'스위치 기술', type:'sel', o:[['ltps','LTPS (T3·T4 p-type)'],['ltpo','LTPO (T3·T4 Oxide n-type)']]},
+  dVth:{l:'ΔVth (산포 평가)', u:'V', min:0.01, max:0.5, step:0.01},
+  dMu:{l:'Δµ (산포 평가)', u:'%', min:1, max:30, step:1},
+};
+const GROUPS = {
+  lcd:[['타이밍',['fr','rows','vbl','setup','oe']],['배선 RC · 화소 위치',['gx','tgFar','dy','tdFar']],['스위칭 TFT',['mu_l','wl_l','vth_l','ioff']],['커패시턴스',['cst_l','clc','clcR','cgs_l','tlc','dynC']],['전압 · 구동',['vgh_l','vgl_l','vcom','vgray','prevGray','pol','inv','pattern']]],
+  o2:[['타이밍',['fr','rows','vbl','setup','oe']],['배선 RC · 화소 위치',['gx','tgFar','dy','tdFar']],['구동 TFT (DT)',['mu_o','wl_o','vth_o','ioff']],['커패시턴스',['cst_o','cdt','cgs_o']],['전압 · 데이터',['vgh_o','vgl_o','elvdd','vdata','vprevF','pattern']],['산포 평가',['dVth','dMu']]],
+  o7:[['타이밍',['fr','rows','vbl','setup','oe']],['배선 RC · 화소 위치',['gx','tgFar','dy','tdFar']],['소자',['tech','mu_o','wl_o','vth_o','ioff']],['커패시턴스',['cst_o','cdt','cgs_o']],['전압 · 데이터',['vgh_o','vgl_o','elvdd','vdata','vprevF','vinit','pattern']],['산포 평가',['dVth','dMu']]],
+};
+const PRESETS = {
+  lcd:[
+    {n:'65" UHD TV · a-Si · 120Hz', p:{fr:120,rows:2160,vbl:90,setup:0.2,oe:0.4,gx:1,tgFar:0.7,dy:1,tdFar:0.5,mu:0.5,wl:22,vth:2.0,ioff:-12,cst:0.40,clc:0.35,clcR:1.6,cgs:25,tlc:6,dynC:true,vgh:28,vgl:-6,vcom:7.5,vgray:4.0,prevGray:4.0,pol:'pos',inv:'column',pattern:'same'}},
+    {n:'27" QHD 게이밍 · a-Si · 240Hz', p:{fr:240,rows:1440,vbl:60,setup:0.15,oe:0.4,gx:1,tgFar:1.0,dy:1,tdFar:0.6,mu:0.5,wl:18,vth:2.0,ioff:-12,cst:0.30,clc:0.25,clcR:1.6,cgs:22,tlc:4,dynC:true,vgh:28,vgl:-6,vcom:7.5,vgray:4.0,prevGray:1.0,pol:'pos',inv:'dot',pattern:'same'}},
+    {n:'14" 노트북 · IGZO · 60Hz', p:{fr:60,rows:1600,vbl:40,setup:0.3,oe:0.8,gx:1,tgFar:1.5,dy:1,tdFar:0.6,mu:10,wl:2,vth:0.8,ioff:-15,cst:0.12,clc:0.10,clcR:1.5,cgs:8,tlc:8,dynC:true,vgh:22,vgl:-8,vcom:6,vgray:3.5,prevGray:3.5,pol:'pos',inv:'column',pattern:'same'}},
+    {n:'IGZO 저주파 구동 · 1Hz (60Hz 스캔)', p:{fr:1,rows:1600,vbl:40,setup:0.3,oe:0.8,gx:1,tgFar:1.5,dy:1,tdFar:0.6,mu:10,wl:2,vth:0.8,ioff:-15,cst:0.12,clc:0.10,clcR:1.5,cgs:8,tlc:8,dynC:true,vgh:22,vgl:-8,vcom:6,vgray:3.5,prevGray:3.5,pol:'pos',inv:'column',pattern:'same'}},
+    {n:'a-Si를 1Hz로 구동 (비교용)', p:{fr:1,rows:2160,vbl:90,setup:0.2,oe:0.4,gx:1,tgFar:0.7,dy:1,tdFar:0.5,mu:0.5,wl:22,vth:2.0,ioff:-12,cst:0.40,clc:0.35,clcR:1.6,cgs:25,tlc:6,dynC:true,vgh:28,vgl:-6,vcom:7.5,vgray:4.0,prevGray:4.0,pol:'pos',inv:'column',pattern:'same'}},
+  ],
+  o2:[
+    {n:'2T1C 기본 · LTPS · 60Hz', p:{fr:60,rows:2400,vbl:60,setup:0.2,oe:0.4,gx:1,tgFar:0.6,dy:1,tdFar:0.5,mu:80,wl:0.2,vth:2.0,ioff:-13,cst:100,cdt:15,cgs:2,vgh:7,vgl:-7,elvdd:4.6,vdata:1.75,vprevF:1.75,pattern:'same',dVth:0.1,dMu:10}},
+    {n:'2T1C · 120Hz · 블랙→화이트 전환', p:{fr:120,rows:2400,vbl:60,setup:0.2,oe:0.4,gx:1,tgFar:0.6,dy:1,tdFar:0.5,mu:80,wl:0.2,vth:2.0,ioff:-13,cst:100,cdt:15,cgs:2,vgh:7,vgl:-7,elvdd:4.6,vdata:0.9,vprevF:2.6,pattern:'black',dVth:0.1,dMu:10}},
+  ],
+  o7:[
+    {n:'모바일 FHD+ · LTPS 7T1C · 120Hz', p:{tech:'ltps',fr:120,rows:2400,vbl:60,setup:0.2,oe:0.4,gx:1,tgFar:0.6,dy:1,tdFar:0.5,mu:80,wl:0.2,vth:2.0,ioff:-13,cst:100,cdt:15,cgs:2,vgh:7,vgl:-7,elvdd:4.6,vdata:3.75,vprevF:3.75,vinit:-3.5,pattern:'same',dVth:0.1,dMu:10}},
+    {n:'모바일 QHD+ · LTPS 7T1C · 120Hz', p:{tech:'ltps',fr:120,rows:3200,vbl:60,setup:0.2,oe:0.4,gx:1,tgFar:0.7,dy:1,tdFar:0.6,mu:80,wl:0.2,vth:2.0,ioff:-13,cst:80,cdt:12,cgs:1.6,vgh:7,vgl:-7,elvdd:4.6,vdata:3.75,vprevF:3.75,vinit:-3.5,pattern:'same',dVth:0.1,dMu:10}},
+    {n:'LTPO 7T1C · 1Hz (120Hz 스캔 + 스킵)', p:{tech:'ltpo',fr:1,rows:2400,vbl:60,setup:0.2,oe:0.4,gx:1,tgFar:0.6,dy:1,tdFar:0.5,mu:80,wl:0.2,vth:2.0,ioff:-15.5,cst:100,cdt:15,cgs:2,vgh:7,vgl:-7,elvdd:4.6,vdata:3.75,vprevF:3.75,vinit:-3.5,pattern:'same',dVth:0.1,dMu:10}},
+    {n:'LTPS 7T1C를 1Hz로 구동 (비교용)', p:{tech:'ltps',fr:1,rows:2400,vbl:60,setup:0.2,oe:0.4,gx:1,tgFar:0.6,dy:1,tdFar:0.5,mu:80,wl:0.2,vth:2.0,ioff:-13,cst:100,cdt:15,cgs:2,vgh:7,vgl:-7,elvdd:4.6,vdata:3.75,vprevF:3.75,vinit:-3.5,pattern:'same',dVth:0.1,dMu:10}},
+  ],
+};
+
+/* ───────── LCD 1T1C ───────── */
+const lcdRow = (pat, g) => pat === 'same' ? g : pat === 'black' ? 0.3 : 4.8;
+function simLCD(p, pol, o = {}){
+  const T = timing(p), {H, Tf, ton, toff} = T;
+  const gx = o.gx ?? p.gx;
+  const tg = Math.max(p.tgFar*1e-6*el(gx), 2e-9), td = Math.max(p.tdFar*1e-6*el(p.dy), 2e-9);
+  const beta = p.mu*COX_LCD*p.wl, goff = Math.pow(10, p.ioff)/10;
+  const cst = p.cst*1e-12, cgs = p.cgs*1e-15, clc0 = p.clc*1e-12;
+  const clcEq = v => clc0*(1 + (p.clcR - 1)*smooth((Math.abs(v) - 1.5)/3));
+  const vc = p.vcom, g = p.vgray, gRow = lcdRow(p.pattern, g), polRow = p.inv === 'dot' ? -pol : pol;
+  const vn = vc + pol*g, vrow = vc + polRow*gRow, vp0 = vc - pol*p.prevGray;
+  let clc = p.dynC ? clcEq(p.prevGray) : clcEq(g);
+  const clcW = clc, Ct = cst + clc + cgs, k = cgs/Ct;
+  const gE = [[ton, p.vgh], [toff, p.vgl]], dE = [[-H, vrow], [0, vn], [H, vrow]];
+  const G = t => rc(t, p.vgl, gE, tg)[0], D = t => rc(t, vrow, dE, td)[0];
+  const f = (t, X) => { const gv = G(t), V = X + k*gv; return tftN(gv, D(t), V, beta, p.vth, goff)/Ct; };
+  const tA = -1.5*H, tB = 2.5*H;
+  const r = {t:[], g:[], d:[], dlo:[], dhi:[], v:[], i:[]};
+  const rec = (t, X) => { const gv = G(t), V = X + k*gv, dv = D(t);
+    r.t.push(t); r.g.push(gv); r.d.push(dv); r.dlo.push(dv); r.dhi.push(dv); r.v.push(V); r.i.push(tftN(gv, dv, V, beta, p.vth, goff)); };
+  integrate(f, vp0 - k*p.vgl, tA, tB, o.N || 1400, rec);
+  r.nw = r.t.length;
+  if (!o.noHold){
+    const dot = p.inv === 'dot', vavg = dot ? vc : vrow, lo = dot ? vc - gRow : vrow, hi = dot ? vc + gRow : vrow;
+    let V = r.v[r.nw-1], Q = (cst + clc)*(V - vc) + cgs*(V - p.vgl);
+    const M = 900, dt = (Tf - tB)/M, S = 6, h = dt/S, tl = p.tlc*1e-3; let t = tB;
+    for (let m = 0; m < M; m++){
+      let I = 0;
+      for (let s = 0; s < S; s++){
+        I = tftN(p.vgl, vavg, V, beta, p.vth, goff); Q += I*h;
+        if (p.dynC) clc += (clcEq(V - vc) - clc)*(1 - Math.exp(-h/tl));
+        V = (Q + (cst + clc)*vc + cgs*p.vgl)/(cst + clc + cgs);
+      }
+      t += dt; r.t.push(t); r.g.push(p.vgl); r.d.push(vavg); r.dlo.push(lo); r.dhi.push(hi); r.v.push(V); r.i.push(I);
+    }
+  }
+  Object.assign(r, {H, Tf, ton, toff, tg, td, tA, tB, vn, vrow, vp0, vc, Ct, clcW, clcEnd: clc, beta, cst, cgs, scanF: T.scanF, skip: T.skip, pol});
+  r.vOn = at(toff, r.t, r.v); r.vAft = r.v[r.nw-1]; r.vEnd = r.v[r.v.length-1];
+  return r;
+}
+function frameStats(r){
+  let s1 = 0, s2 = 0, tw = 0;
+  for (let i = 1; i < r.t.length; i++){
+    if (r.t[i] <= 0) continue;
+    const a = Math.max(0, r.t[i-1]), dt = r.t[i] - a; if (dt <= 0) continue;
+    const v = 0.5*(r.v[i] + r.v[i-1]) - r.vc;
+    s1 += v*dt; s2 += v*v*dt; tw += dt;
+  }
+  return {mean: s1/tw, rms: Math.sqrt(s2/tw)};
+}
+function runLCD(p){
+  const pos = simLCD(p, +1), neg = simLCD(p, -1);
+  const r = p.pol === 'pos' ? pos : neg;
+  const sp = frameStats(pos), sn = frameStats(neg);
+  const near = simLCD(p, p.pol === 'pos' ? 1 : -1, {gx:0, noHold:true, N:900});
+  const far = simLCD(p, p.pol === 'pos' ? 1 : -1, {gx:1, noHold:true, N:900});
+  const swing = r.vn - r.vp0;
+  r.m = {
+    rate: Math.abs(swing) > 1e-3 ? (r.vOn - r.vp0)/swing : NaN,
+    kick: r.vAft - r.vOn,
+    kickTh: -r.cgs/r.Ct*(p.vgh - p.vgl),
+    hold: r.vEnd - r.vAft,
+    dc: (sp.mean + sn.mean)/2,
+    flick: sp.rms - sn.rms,
+    kNear: near.vAft - near.vOn, kFar: far.vAft - far.vOn,
+    vovEnd: p.vgh - Math.min(r.vn, r.vn) - p.vth,
+  };
+  r.m.ron = 1/(r.beta*Math.max(0.05, p.vgh - r.vn - p.vth));
+  r.m.tau = r.m.ron*r.Ct;
+  return r;
+}
+
+/* ───────── OLED 2T1C ───────── */
+const o2Row = (p, pat) => pat === 'same' ? p.vdata : pat === 'black' ? p.elvdd - p.vth : p.elvdd - p.vth - 2;
+function simO2(p, o = {}){
+  const T = timing(p, 120), {H, Tf, ton, toff} = T;
+  const tg = Math.max(p.tgFar*1e-6*el(p.gx), 2e-9), td = Math.max(p.tdFar*1e-6*el(p.dy), 2e-9);
+  const vth = p.vth + (o.dvth || 0), bDT = p.mu*COX_OLED*p.wl*(1 + (o.dmu || 0));
+  const goff = Math.pow(10, p.ioff)/10;
+  const cst = p.cst*1e-15, cdt = p.cdt*1e-15, cgs = p.cgs*1e-15, C = cst + cdt + cgs, k = cgs/C;
+  const vn = p.vdata, vrow = o2Row(p, p.pattern);
+  const sE = [[ton, p.vgl], [toff, p.vgh]], dE = [[-H, vrow], [0, vn], [H, vrow]];
+  const S = t => rc(t, p.vgh, sE, tg)[0], D = t => rc(t, vrow, dE, td)[0];
+  const Iol = V => 0.5*bDT*Math.pow(softplus(p.elvdd - V - vth), 2);
+  const f = (t, X) => { const s = S(t), V = X + k*s; return tftP(s, D(t), V, B_SW, VTH_SW, goff)/C; };
+  const tA = -1.5*H, tB = 2.5*H, V0 = p.vprevF;
+  const r = {t:[], s2:[], d:[], dlo:[], dhi:[], v:[], io:[], i2:[]};
+  const rec = (t, X) => { const s = S(t), V = X + k*s, d = D(t);
+    r.t.push(t); r.s2.push(s); r.d.push(d); r.dlo.push(d); r.dhi.push(d); r.v.push(V); r.io.push(Iol(V)); r.i2.push(tftP(s, d, V, B_SW, VTH_SW, goff)); };
+  integrate(f, V0 - k*p.vgh, tA, tB, o.N || 1400, rec);
+  r.nw = r.t.length;
+  if (!o.noHold){
+    let V = r.v[r.nw-1]; const M = 900, dt = (Tf - tB)/M, SS = 6, h = dt/SS; let t = tB;
+    for (let m = 0; m < M; m++){
+      for (let s = 0; s < SS; s++) V += tftP(p.vgh, vrow, V, B_SW, VTH_SW, goff)/C*h;
+      t += dt; r.t.push(t); r.s2.push(p.vgh); r.d.push(vrow); r.dlo.push(vrow); r.dhi.push(vrow); r.v.push(V); r.io.push(Iol(V)); r.i2.push(0);
+    }
+  }
+  Object.assign(r, {H, Tf, ton, toff, tg, td, tA, tB, vn, vrow, C, bDT, vth, scanF: T.scanF, skip: T.skip});
+  r.vOn = at(toff, r.t, r.v); r.vAft = r.v[r.nw-1]; r.I0 = r.io[r.nw-1]; r.Iend = r.io[r.io.length-1];
+  return r;
+}
+function runO2(p){
+  const r = simO2(p);
+  const a = simO2(p, {dvth: p.dVth, noHold:true, N:900}), b = simO2(p, {dmu: p.dMu/100, noHold:true, N:900});
+  const Iid = 0.5*r.bDT*Math.pow(Math.max(0, p.elvdd - p.vdata - p.vth), 2);
+  r.m = {
+    err: r.vOn - r.vn, kick: r.vAft - r.vOn, kickTh: p.cgs/(p.cst + p.cdt + p.cgs)*(p.vgh - p.vgl),
+    Iid, sV: r.I0 > 1e-12 ? a.I0/r.I0 - 1 : NaN, sM: r.I0 > 1e-12 ? b.I0/r.I0 - 1 : NaN,
+    drift: r.I0 > 1e-12 ? r.Iend/r.I0 - 1 : NaN,
+  };
+  return r;
+}
+
+/* ───────── OLED 7T1C ───────── */
+const o7Row = (p, pat) => pat === 'same' ? p.vdata : pat === 'black' ? p.elvdd : p.elvdd - 2;
+function simO7(p, o = {}){
+  const T = timing(p, 120), {H, Tf, ton, toff} = T, ox = p.tech === 'ltpo';
+  const tg = Math.max(p.tgFar*1e-6*el(p.gx), 2e-9), td = Math.max(p.tdFar*1e-6*el(p.dy), 2e-9);
+  const vth = p.vth + (o.dvth || 0), bDT = p.mu*COX_OLED*p.wl*(1 + (o.dmu || 0));
+  const goff = Math.pow(10, p.ioff)/10;
+  const cst = p.cst*1e-15, cdt = p.cdt*1e-15, cgs = p.cgs*1e-15, C = cst + cdt + 2*cgs, k = cgs/C, kdt = cdt/C;
+  const vn = p.vdata, vrow = o7Row(p, p.pattern), vinit = p.vinit, vN3 = ELVSS + 3.0;
+  const tEmOff = -1.2*H, tEmOn = 1.3*H, oeS = p.oe*1e-6;
+  const spE = [[-H + ton, p.vgl], [-oeS, p.vgh]], snE = [[ton, p.vgl], [toff, p.vgh]];
+  const spoE = [[-H + ton, p.vgh], [-oeS, p.vgl]], snoE = [[ton, p.vgh], [toff, p.vgl]];
+  const emE = [[tEmOff, p.vgh], [tEmOn, p.vgl]], n2E = [[ton, vn], [tEmOn, p.elvdd]];
+  const dE = [[-H, vrow], [0, vn], [H, vrow]];
+  const SP = t => rc(t, p.vgh, spE, tg)[0], SN = t => rc(t, p.vgh, snE, tg)[0];
+  const SPO = t => rc(t, p.vgl, spoE, tg)[0], SNO = t => rc(t, p.vgl, snoE, tg)[0];
+  const EM = t => rc(t, p.vgl, emE, tg)[0], N2 = t => rc(t, p.elvdd, n2E, Math.max(tg, td))[0];
+  const D = t => rc(t, vrow, dE, td)[0];
+  const G4 = ox ? SPO : SP, G3 = ox ? SNO : SN;
+  const Vof = (t, X) => X + k*(G3(t) + G4(t)) + kdt*N2(t);
+  const icomp = (t, V) => {
+    const d = D(t), sn = SN(t), g3 = G3(t);
+    const vov2 = softplus(d - sn - VTH_SW);
+    const vov3 = ox ? softplus(g3 - V - VTH_OX) : softplus(V - g3 - VTH_SW);
+    const R = 1/(B_SW*Math.max(vov2, 1e-40)) + 1/((ox ? B_OX : B_SW)*Math.max(vov3, 1e-40));
+    const a = d - V - vth; if (a <= 0) return 0;
+    const z = bDT*R*a; const x = z < 1e-6 ? a : (-1 + Math.sqrt(1 + 2*z))/(bDT*R);
+    return 0.5*bDT*x*x;
+  };
+  const i4 = (t, V) => ox ? tftN(G4(t), vinit, V, B_OX, VTH_OX, goff) : tftP(G4(t), vinit, V, B_SW, VTH_SW, goff);
+  const f = (t, X) => { const V = Vof(t, X); return (i4(t, V) + icomp(t, V))/C; };
+  const emF = e => smooth((p.vgh - e)/(p.vgh - p.vgl)*1.25 - 0.1);
+  const Iol = (V, e) => emF(e)*0.5*bDT*Math.pow(softplus(p.elvdd - V - vth), 2);
+  const tA = -1.5*H, tB = 2.5*H, V0 = p.vprevF - vth;
+  const r = {t:[], s1:[], s2:[], s3:[], em:[], d:[], dlo:[], dhi:[], v:[], n2:[], io:[], ic:[], i4:[]};
+  const rec = (t, X) => { const V = Vof(t, X), e = EM(t), d = D(t);
+    r.t.push(t); r.s1.push(G4(t)); r.s2.push(SN(t)); r.s3.push(SNO(t)); r.em.push(e); r.d.push(d); r.dlo.push(d); r.dhi.push(d);
+    r.v.push(V); r.n2.push(N2(t)); r.io.push(Iol(V, e)); r.ic.push(icomp(t, V)); r.i4.push(i4(t, V)); };
+  integrate(f, V0 - k*(G3(tA) + G4(tA)) - kdt*N2(tA), tA, tB, o.N || 1600, rec);
+  r.nw = r.t.length;
+  if (!o.noHold){
+    let V = r.v[r.nw-1]; const M = 900, dt = (Tf - tB)/M, SS = 6, h = dt/SS; let t = tB;
+    const g4off = ox ? p.vgl : p.vgh, g3off = ox ? p.vgl : p.vgh;
+    for (let m = 0; m < M; m++){
+      for (let s = 0; s < SS; s++){
+        const I = ox ? tftN(g4off, vinit, V, B_OX, VTH_OX, goff) + tftN(g3off, vN3, V, B_OX, VTH_OX, goff)
+                     : tftP(g4off, vinit, V, B_SW, VTH_SW, goff) + tftP(g3off, vN3, V, B_SW, VTH_SW, goff);
+        V += I/C*h;
+      }
+      t += dt; r.t.push(t); r.s1.push(g4off); r.s2.push(p.vgh); r.s3.push(p.vgl); r.em.push(p.vgl); r.d.push(vrow); r.dlo.push(vrow); r.dhi.push(vrow);
+      r.v.push(V); r.n2.push(p.elvdd); r.io.push(Iol(V, p.vgl)); r.ic.push(0); r.i4.push(0);
+    }
+  }
+  Object.assign(r, {H, Tf, ton, toff, tg, td, tA, tB, vn, vrow, vinit, C, bDT, vth, ox, tEmOn, tEmOff, oeS, scanF: T.scanF, skip: T.skip});
+  r.vInitEnd = at(-oeS, r.t, r.v); r.vComp = at(toff, r.t, r.v);
+  r.vPreEm = at(tEmOn - 0.02*H, r.t, r.v); r.vAft = r.v[r.nw-1];
+  r.I0 = r.io[r.nw-1]; r.Iend = r.io[r.io.length-1];
+  return r;
+}
+function runO7(p){
+  const r = simO7(p);
+  const a = simO7(p, {dvth: p.dVth, noHold:true, N:1000}), b = simO7(p, {dmu: p.dMu/100, noHold:true, N:1000});
+  const tc = r.toff - r.ton, u0 = r.vn - r.vth - r.vInitEnd, kap = r.bDT*tc/(2*r.C);
+  const vov = p.elvdd - p.vdata;
+  r.m = {
+    resid: (r.vn - r.vth) - r.vComp, uTh: u0 > 0 ? u0/(1 + kap*u0) : 0, u0, kap, tc,
+    kick: r.vAft - r.vComp, kick3: r.vPreEm - r.vComp, kickEm: r.vAft - r.vPreEm,
+    Iid: 0.5*r.bDT*Math.pow(Math.max(0, vov), 2),
+    sV: r.I0 > 1e-12 ? a.I0/r.I0 - 1 : NaN, sM: r.I0 > 1e-12 ? b.I0/r.I0 - 1 : NaN,
+    sV2: vov > 0 ? Math.pow(Math.max(0, vov - p.dVth), 2)/(vov*vov) - 1 : NaN,
+    drift: r.I0 > 1e-12 ? r.Iend/r.I0 - 1 : NaN,
+  };
+  return r;
+}
+
+/* ───────── schematic primitives ───────── */
+function hT(id, x, y, side, ptype, label, ox){
+  const s = side === 'top' ? -1 : 1, ch = y + s*4, gp = y + s*10, ge = y + s*22;
+  let g = `<g class="tft${ox ? ' ox' : ''}" id="${id}"><path class="w" d="M${x-20} ${y}H${x-10}V${ch}M${x+20} ${y}H${x+10}V${ch}"/>`;
+  g += `<path class="chn" d="M${x-12} ${ch}H${x+12}"/><path class="gp" d="M${x-12} ${gp}H${x+12}"/>`;
+  g += ptype ? `<circle class="bub" cx="${x}" cy="${gp + s*3.5}" r="3"/><path class="w" d="M${x} ${gp + s*6.5}V${ge}"/>` : `<path class="w" d="M${x} ${gp}V${ge}"/>`;
+  g += `<text class="tl" x="${x+15}" y="${side === 'top' ? y + 16 : y - 9}">${label}</text></g>`;
+  return g;
+}
+function vT(id, x, y, ptype, label){
+  const ch = x - 4, gp = x - 10, ge = x - 22;
+  let g = `<g class="tft" id="${id}"><path class="w" d="M${x} ${y-20}V${y-10}H${ch}M${x} ${y+20}V${y+10}H${ch}"/>`;
+  g += `<path class="chn" d="M${ch} ${y-12}V${y+12}"/><path class="gp" d="M${gp} ${y-12}V${y+12}"/>`;
+  g += ptype ? `<circle class="bub" cx="${gp-3.5}" cy="${y}" r="3"/><path class="w" d="M${gp-6.5} ${y}H${ge}"/>` : `<path class="w" d="M${gp} ${y}H${ge}"/>`;
+  g += `<text class="tl" x="${x+8}" y="${y+4}">${label}</text></g>`;
+  return g;
+}
+function vC(id, x, y1, y2, label, dashed){
+  const m = (y1 + y2)/2;
+  return `<g class="cap${dashed ? ' dashc' : ''}" id="${id}"><path class="w${dashed ? ' dash' : ''}" d="M${x} ${y1}V${m-4}M${x} ${m+4}V${y2}"/><path class="plate" d="M${x-11} ${m-4}H${x+11}M${x-11} ${m+4}H${x+11}"/><text class="tl" x="${x+15}" y="${m+4}">${label}</text></g>`;
+}
+const oled = (x, y) => `<g id="oled"><path class="w" d="M${x} ${y-14}V${y-6}M${x} ${y+6}V${y+14}"/><path class="dio" d="M${x-9} ${y-6}H${x+9}L${x} ${y+6}Z"/><path class="plate" d="M${x-9} ${y+6}H${x+9}"/><path class="ray" d="M${x+12} ${y-1}l7 -6M${x+13} ${y+5}l7 -6"/></g>`;
+const dot = (x, y) => `<circle class="node" cx="${x}" cy="${y}" r="3"/>`;
+const svgOpen = (w, h, label) => `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${label}" xmlns="http://www.w3.org/2000/svg">`;
+
+/* ───────── mode definitions ───────── */
+const MODES = {
+lcd: {
+  tag: 'a-Si / IGZO · n-type · Cst on Vcom',
+  run: runLCD,
+  schem(){
+    return svgOpen(400, 236, 'LCD 1T1C 화소 회로') +
+      `<path class="w bus" d="M30 32H386"/><text class="rl" x="386" y="22" text-anchor="end">Gate[n]</text>` +
+      `<path class="w bus" d="M56 12V226"/><text class="rl" x="63" y="52">Data[m]</text>` +
+      `<path class="w" d="M56 112H130M150 90V32M170 112H300"/>` + dot(56,112) + dot(150,32) + dot(190,32) + dot(190,112) + dot(220,112) + dot(300,112) +
+      hT('T1', 150, 112, 'top', false, 'T1') +
+      vC('Cgs', 190, 32, 112, 'Cgs', true) + vC('Cst', 220, 112, 196, 'Cst') + vC('Clc', 300, 112, 196, 'Clc') +
+      `<path class="w bus" d="M204 196H332"/><text class="rl" x="338" y="200">Vcom</text>` +
+      `<text class="val" id="sv-p" x="228" y="104">Vp</text><text class="val g" id="sv-g" x="250" y="48">G</text>` +
+      `<text class="val d" id="sv-d" x="63" y="166">D</text><text class="val i" id="sv-i" x="96" y="142">I</text></svg>`;
+  },
+  lanes(r, p){
+    const m = r.m, annot = [];
+    if (Number.isFinite(m.rate)) annot.push({ta: r.toff, tb: r.toff + 0.55*r.H, v1: r.vOn, v2: r.vAft, text: `ΔVp ${sg(m.kick)} V`});
+    return [
+      {name:'Gate[n]', sub:`화소 위치 τg ${si(r.tg,'s')}`, c:'g', a:r.g, u:'V'},
+      {name:'Data[m]', sub:(p.inv === 'dot' ? '도트' : '컬럼') + ` 인버전 · τd ${si(r.td,'s')}`, c:'d', a:r.d, lo:r.dlo, hi:r.dhi, u:'V'},
+      {name:'Vp', sub:'화소 전압', c:'px', a:r.v, u:'V', refs:[{v:r.vc, l:'Vcom'}, {v:r.vn, l:'목표', c:'d'}], annot},
+      {name:'I_TFT', sub:'T1 드레인 전류', c:'cur', a:r.i, u:'A'},
+    ];
+  },
+  bands(r){
+    return [{a:r.ton, b:r.toff, l:'기입', c:'band-w'}, {a:r.toff, b:r.toff + Math.max(3*r.tg, 0.18*r.H), l:'킥백', c:'band-k'}, {a:r.toff + Math.max(3*r.tg, 0.18*r.H), b:r.Tf, l:'유지 (Hold)', c:null}];
+  },
+  probe(r, t, p){
+    const g = at(t, r.t, r.g), d = at(t, r.t, r.d), v = at(t, r.t, r.v), i = at(t, r.t, r.i);
+    const on = g - Math.min(d, v) - p.vth > 0.3;
+    let ph;
+    if (t < 0) ph = ['n−1행 기입 구간', '이웃 행이 기입되는 동안 데이터 라인은 n−1행 데이터를 싣고 있고, 이 화소의 T1은 OFF라 이전 프레임 전압을 유지합니다.', 'g2'];
+    else if (t < r.ton) ph = ['데이터 셋업', 'n행 데이터가 데이터 라인 RC를 따라 화소 위치까지 전파되는 구간입니다. 게이트를 늦게 여는 셋업 마진이 이전 행 데이터의 혼입을 막습니다.', 'd'];
+    else if (t < r.toff) ph = ['기입 (충전)', 'T1이 선형영역으로 켜져 Cst+Clc+Cgs를 데이터 전압으로 충전합니다. 화소 전압이 데이터에 가까워질수록 Vds가 줄어 전류가 감소하고, 원단에서는 게이트 상승 지연이 유효 충전시간을 깎아먹습니다.', 'd'];
+    else if (t < r.toff + Math.max(3*r.tg, 0.18*r.H)) ph = ['게이트 하강 · 킥백', 'VGH→VGL 전이가 Cgs를 통해 화소 노드로 결합되어 ΔVp만큼 끌어내립니다. 게이트 RC가 긴 원단에서는 하강 도중 T1이 부분적으로 켜져 있어 일부 재충전되므로 킥백이 작아집니다.', 'px'];
+    else ph = ['유지 (Hold)', 'T1 OFF. Ioff 누설과 액정 재배향에 따른 Clc 증가(전하 보존)로 화소 전압이 프레임 동안 변합니다. 다음 프레임에는 반대 극성으로 다시 기입됩니다.', 'em'];
+    return {ph, on:{T1:on}, sv:{'sv-p':`Vp ${fx(v)} V`, 'sv-g':`${fx(g,1)} V`, 'sv-d':`${fx(d)} V`, 'sv-i':on || Math.abs(i) > 1e-9 ? `I ${si(i,'A',1)}` : ''},
+      ro:[['Gate', `${fx(g)} V`, 'g'], ['Data', `${fx(d)} V`, 'd'], ['Vp', `${fx(v,3)} V`, 'px'], ['Vp − Vcom', `${sg(v - r.vc,3)} V`, 'px'], ['I_TFT', si(i,'A'), 'cur'], ['T1', on ? 'ON' : 'OFF', null]]};
+  },
+  kpis(r, p){
+    const m = r.m;
+    return [
+      {l:'1H 시간', v:si(r.H,'s').split(' ')[0], u:si(r.H,'s').split(' ')[1], sub:`게이트 ON ${si(r.toff - r.ton,'s')}` + (r.skip ? ` · ${r.scanF}Hz 스캔` : '')},
+      {l:'충전률', v:pct(m.rate,2), u:'%', s:Number.isFinite(m.rate) ? grade(1 - m.rate, 0.01, 0.03) : null, sub:`τ≈R_on·C ${si(m.tau,'s')}`},
+      {l:'킥백 ΔVp', v:sg(m.kick,3), u:'V', s:grade(Math.abs(m.kick), 0.6, 1.2), sub:`근단 ${sg(m.kNear,2)} / 원단 ${sg(m.kFar,2)} V`},
+      {l:'유지 중 변화', v:sg(m.hold*1000,1), u:'mV', s:grade(Math.abs(m.hold), 0.02, 0.08), sub:`Tf ${si(r.Tf,'s')} · 누설+동적C`},
+      {l:'플리커 ΔVrms (+/−)', v:sg(m.flick*1000,0), u:'mV', s:grade(Math.abs(m.flick), 0.02, 0.1), sub:'양·음 프레임 실효전압 차'},
+      {l:'최적 Vcom', v:fx(p.vcom + m.dc,3), u:'V', sub:`현재 대비 ${sg(m.dc*1000,0)} mV`},
+    ];
+  },
+  notes(r, p){
+    const m = r.m, ideal = 1 - Math.exp(-(r.toff - r.ton)/m.tau);
+        const ratio = (p.cst*1e-12 + r.clcW)/(p.cst*1e-12 + r.clcEnd);
+    return [
+      {h:'1H 시간 예산', eq:'1H = 1 / [ f<sub>scan</sub> · (N + N<sub>blank</sub>) ]', num:`= 1 / [${r.scanF} · (${p.rows} + ${p.vbl})] = ${si(r.H,'s')}  →  게이트 ON ${si(r.toff - r.ton,'s')}`, t:'유효 충전시간은 1H에서 데이터 셋업과 게이트 OFF 마진(OE)을 뺀 값이며, 원단에서는 게이트 상승 지연까지 더 빠집니다. 고해상도·고주사율일수록 1H가 줄어 TFT 전류 구동력(µ·W/L)이 병목이 됩니다.'},
+      {h:'RC 충전과 충전률', eq:'τ ≈ R<sub>on</sub>·C<sub>tot</sub>,  R<sub>on</sub> = 1 / [µC<sub>ox</sub>(W/L)(V<sub>GH</sub> − V<sub>data</sub> − V<sub>th</sub>)]', num:`R_on ${si(m.ron,'Ω')} × C_tot ${si(r.Ct,'F')} = ${si(m.tau,'s')}  →  1−e^(−t/τ) = ${pct(ideal,2)} %  (시뮬레이션 ${pct(m.rate,2)} %)`, t:'단순 지수식과 시뮬레이션의 차이는 게이트·데이터 라인 RC 지연과, 화소 전압이 올라갈수록 Vgs가 줄어드는 소스-팔로워성 비선형 때문입니다. 부극성 기입은 화소가 TFT의 소스가 되어 Vgs가 커지므로 보통 더 빠릅니다.'},
+      {h:'킥백 (Feed-through)', eq:'ΔV<sub>p</sub> = − C<sub>gs</sub> / (C<sub>st</sub> + C<sub>lc</sub> + C<sub>gs</sub>) · (V<sub>GH</sub> − V<sub>GL</sub>)', num:`= −${p.cgs} fF / ${si(r.Ct,'F')} × ${fx(p.vgh - p.vgl,1)} V = ${sg(m.kickTh,3)} V  (이상치)  ·  시뮬레이션 ${sg(m.kick,3)} V`, t:'킥백은 극성과 무관하게 항상 음(−) 방향이라 양·음 프레임의 실효전압이 어긋나 플리커와 DC 잔류(잔상)를 만듭니다. Vcom을 평균 킥백만큼 내리면 상쇄되지만, 게이트 RC 때문에 근단과 원단의 킥백이 달라 패널 전체를 하나의 Vcom으로 맞출 수 없습니다. Clc가 계조에 따라 변해 ΔVp도 계조 의존성을 가집니다.'},
+      {h:'유지 · 누설', eq:'ΔV<sub>hold</sub> ≈ − I<sub>off</sub> · T<sub>f</sub> / C<sub>tot</sub>', num:`Ioff ${exp10(p.ioff)} (@10 V) · Tf ${si(r.Tf,'s')} → 시뮬레이션 ${sg(m.hold*1000,1)} mV`, t:'a-Si의 pA급 누설로는 저주파 구동 시 수백 mV 이상 떨어져 휘도가 변합니다. IGZO는 10⁻¹⁵ A 이하 누설로 1Hz급 저주파 구동이 가능합니다. 도트 인버전에서는 데이터 라인 평균이 Vcom 근처라 누설 방향이 상쇄되는 경향이 있습니다.'},
+      {h:'동적 커패시턴스', eq:'Q 보존: V<sub>∞</sub> − V<sub>com</sub> = (V<sub>0</sub> − V<sub>com</sub>) · (C<sub>st</sub> + C<sub>lc,0</sub>) / (C<sub>st</sub> + C<sub>lc,∞</sub>)', num:p.dynC ? `Clc ${si(r.clcW,'F')} → ${si(r.clcEnd,'F')}  ·  전압비 ${fx(ratio,3)}` : '동적 커패시턴스 꺼짐 — Clc를 현재 계조의 평형값으로 고정', t:'액정이 재배향하면 유전율이 ε⊥에서 ε∥ 쪽으로 바뀌어 Clc가 커지고, 이미 고립된 화소 전하가 재분배되어 전압이 떨어집니다. 그래서 한 프레임 안에 목표 투과율에 도달하지 못하며, 이를 보상하는 것이 오버드라이브(ODC)입니다. 이전 프레임 계조를 바꿔 효과를 확인하세요.'},
+    ];
+  },
+},
+o2: {
+  tag: 'LTPS · p-type · 보상 없음',
+  run: runO2,
+  schem(){
+    return svgOpen(400, 250, 'OLED 2T1C 화소 회로') +
+      `<path class="w bus" d="M196 22H300"/><text class="rl" x="306" y="26">ELVDD</text>` +
+      `<path class="w bus" d="M56 12V236"/><text class="rl" x="63" y="26">Data[m]</text>` +
+      `<path class="w" d="M270 22V90M270 130V172M270 200V222M200 110H248M150 110H200M56 110H110"/>` +
+      vT('DT', 270, 110, true, 'DT') + vC('Cst', 200, 22, 110, 'Cst') + hT('T2', 130, 110, 'top', true, 'T2') + oled(270, 186) +
+      dot(200,110) + dot(56,110) + dot(200,22) +
+      `<text class="tl" x="130" y="80" text-anchor="middle">S[n]</text><text class="rl" x="270" y="238" text-anchor="middle">ELVSS</text>` +
+      `<text class="val" id="sv-n1" x="206" y="130">N1</text><text class="val i" id="sv-io" x="294" y="210">I</text><text class="val d" id="sv-d" x="63" y="150">D</text></svg>`;
+  },
+  lanes(r, p){
+    const annot = [{ta:r.toff, tb:r.toff + 0.55*r.H, v1:r.vOn, v2:r.vAft, text:`킥백 ${sg(r.m.kick*1000,0)} mV`}];
+    return [
+      {name:'S[n]', sub:`T2 · τg ${si(r.tg,'s')}`, c:'g', a:r.s2, u:'V'},
+      {name:'Data[m]', sub:`τd ${si(r.td,'s')}`, c:'d', a:r.d, lo:r.dlo, hi:r.dhi, u:'V'},
+      {name:'V_N1', sub:'DT 게이트 (Cst)', c:'px', a:r.v, u:'V', refs:[{v:r.vn, l:'Vdata', c:'d'}], annot},
+      {name:'I_OLED', sub:'발광 전류', c:'cur', a:r.io, u:'A'},
+    ];
+  },
+  bands(r){ return [{a:r.ton, b:r.toff, l:'기입', c:'band-w'}, {a:r.toff, b:r.toff + Math.max(3*r.tg, 0.18*r.H), l:'킥백', c:'band-k'}, {a:r.toff + Math.max(3*r.tg, 0.18*r.H), b:r.Tf, l:'발광 유지', c:null}]; },
+  probe(r, t, p){
+    const s = at(t, r.t, r.s2), d = at(t, r.t, r.d), v = at(t, r.t, r.v), io = at(t, r.t, r.io), i2 = at(t, r.t, r.i2);
+    const on2 = Math.max(d, v) - s > VTH_SW + 0.3;
+    let ph;
+    if (t < r.ton) ph = ['대기 · 데이터 셋업', '이웃 행이 기입되는 동안 T2는 OFF. DT는 이전 프레임에 저장된 Vsg로 계속 OLED 전류를 흘립니다.', 'g2'];
+    else if (t < r.toff) ph = ['기입', 'T2가 켜져 데이터 전압이 DT 게이트(N1)에 직접 기입됩니다. 2T1C에는 발광 제어 트랜지스터가 없어 기입 중에도 전류가 계조를 따라 바로 변합니다.', 'd'];
+    else if (t < r.toff + Math.max(3*r.tg, 0.18*r.H)) ph = ['T2 OFF · 킥백', 'p-type이므로 스캔이 VGL→VGH로 상승하며 Cgs 결합이 N1을 끌어올립니다. Vsg가 줄어 전류가 감소하는 방향입니다.', 'px'];
+    else ph = ['발광 유지', 'I = β/2 · (ELVDD − V_N1 − |Vth|)². Vth가 전류식에 그대로 남아 있으므로 DT의 Vth 산포가 곧 휘도 산포(무라)가 됩니다.', 'em'];
+    return {ph, on:{T2:on2, DT:io > 1e-10}, oled:io/Math.max(r.m.Iid*1.5, 1e-9),
+      sv:{'sv-n1':`N1 ${fx(v)} V`, 'sv-io':`${si(io,'A',0)}`, 'sv-d':`${fx(d)} V`},
+      ro:[['S[n]', `${fx(s)} V`, 'g'], ['Data', `${fx(d)} V`, 'd'], ['V_N1', `${fx(v,3)} V`, 'px'], ['Vsg (DT)', `${fx(p.elvdd - v,3)} V`, null], ['I_T2', si(i2,'A'), null], ['I_OLED', si(io,'A'), 'cur']]};
+  },
+  kpis(r, p){
+    const m = r.m;
+    return [
+      {l:'1H 시간', v:si(r.H,'s').split(' ')[0], u:si(r.H,'s').split(' ')[1], sub:`게이트 ON ${si(r.toff - r.ton,'s')}` + (r.skip ? ` · ${r.scanF}Hz 스캔` : '')},
+      {l:'기입 오차 (T2 OFF 직전)', v:sg(m.err*1000,1), u:'mV', s:grade(Math.abs(m.err), 0.01, 0.05), sub:`V_N1 ${fx(r.vOn,3)} V / 목표 ${fx(r.vn,2)} V`},
+      {l:'킥백 ΔV_N1', v:sg(m.kick*1000,0), u:'mV', s:grade(Math.abs(m.kick), 0.15, 0.4), sub:`이상치 ${sg(m.kickTh*1000,0)} mV`},
+      {l:`ΔI/I @ ΔVth ${fx(p.dVth,2)} V`, v:sgPct(m.sV,1), u:'%', s:Number.isFinite(m.sV) ? grade(Math.abs(m.sV), 0.01, 0.03) : null, sub:'Vth 비보상 → 무라'},
+      {l:`ΔI/I @ Δµ ${p.dMu}%`, v:sgPct(m.sM,1), u:'%', s:Number.isFinite(m.sM) ? grade(Math.abs(m.sM), p.dMu/100*0.6, p.dMu/100*1.05) : null, sub:'I ∝ µ (직접 비례)'},
+      {l:'프레임 내 휘도 변화', v:sgPct(m.drift,2), u:'%', s:Number.isFinite(m.drift) ? grade(Math.abs(m.drift), 0.01, 0.03) : null, sub:`I ${si(r.I0,'A',0)} · Tf ${si(r.Tf,'s')}`},
+    ];
+  },
+  notes(r, p){
+    const m = r.m, vov = p.elvdd - p.vdata - p.vth;
+    return [
+      {h:'2T1C 전류식', eq:'I<sub>OLED</sub> = (β/2)(ELVDD − V<sub>data</sub> − |V<sub>th</sub>|)²,  β = µC<sub>ox</sub>W/L', num:`β = ${si(r.bDT,'A/V²')} · Vov = ${fx(vov,2)} V → 이상 전류 ${si(m.Iid,'A')} (시뮬레이션 ${si(r.I0,'A')})`, t:'구동 TFT가 포화영역에서 정전류원으로 동작하므로 게이트-소스 전압의 제곱으로 전류가 정해집니다. 저계조일수록 Vov가 작아 같은 ΔVth에도 상대 오차가 커집니다.'},
+      {h:'Vth 민감도', eq:'ΔI/I ≈ −2ΔV<sub>th</sub> / V<sub>ov</sub>', num:`−2 × ${fx(p.dVth,2)} / ${fx(vov,2)} = ${sgPct(-2*p.dVth/vov,1)} %  (시뮬레이션 ${sgPct(m.sV,1)} %)`, t:'LTPS는 엑시머 레이저 결정화의 입계(grain boundary) 산포로 인접 화소 간 Vth가 ±0.1 V 이상 흩어질 수 있습니다. 2T1C에서는 이것이 그대로 휘도 얼룩이 되므로, 모바일은 내부 보상(7T1C 등), TV는 외부 보상(센싱 후 데이터 보정)을 씁니다.'},
+      {h:'킥백', eq:'ΔV<sub>N1</sub> = + C<sub>gs,T2</sub> / C<sub>N1</sub> · (V<sub>GH</sub> − V<sub>GL</sub>)', num:`= ${p.cgs} fF / ${si(r.C,'F')} × ${fx(p.vgh - p.vgl,1)} V = ${sg(m.kickTh*1000,0)} mV (이상) · 시뮬레이션 ${sg(m.kick*1000,0)} mV`, t:'p-type 스위치는 OFF 전이가 상승 에지라 킥백이 양(+)으로 걸려 Vsg를 줄입니다. 평균 오프셋은 감마 튜닝으로 흡수되지만, 게이트 RC 차이에 따른 근단/원단 편차는 가로줄 무라로 남습니다.'},
+      {h:'유지', eq:'ΔV<sub>N1</sub> ≈ I<sub>off</sub>·T<sub>f</sub> / C<sub>N1</sub>,  ΔI/I ≈ 2ΔV<sub>N1</sub>/V<sub>ov</sub>', num:`Ioff ${exp10(p.ioff)} · Tf ${si(r.Tf,'s')} → 휘도 ${sgPct(m.drift,2)} %`, t:'T2 누설 방향은 데이터 라인 평균 전압에 따라 달라집니다. 인접 행 데이터를 블랙/화이트로 바꿔 보면 같은 화소라도 화면 내용에 따라 유지 특성이 바뀌는 것을 볼 수 있습니다.'},
+    ];
+  },
+},
+o7: {
+  tag: '초기화 → Vth 보상·기입 → 발광',
+  run: runO7,
+  schem(p){
+    const ox = p.tech === 'ltpo';
+    return svgOpen(420, 330, 'OLED 7T1C 화소 회로') +
+      `<path class="w bus" d="M215 22H330"/><text class="rl" x="336" y="26">ELVDD</text>` +
+      `<path class="w bus" d="M400 30V318"/><text class="rl" x="396" y="22" text-anchor="end">Data[m]</text>` +
+      `<path class="w bus" d="M60 134V270"/><text class="rl" x="60" y="126" text-anchor="middle">Vinit</text>` +
+      `<path class="w" d="M300 22V42M300 82V120M300 160V208M300 248V270M300 298V306M300 101H336M376 101H400M215 140H278M215 140V180H228M268 180H300M160 140H215M60 140H120M210 262H300M60 262H170"/>` +
+      vC('Cst', 215, 22, 140, 'Cst') + vT('T5', 300, 62, true, 'T5') + vT('DT', 300, 140, true, 'DT') + vT('T6', 300, 228, true, 'T6') +
+      hT('T2', 356, 101, 'top', true, 'T2') + hT('T3', 248, 180, 'bottom', !ox, 'T3', ox) + hT('T4', 140, 140, 'top', !ox, 'T4', ox) + hT('T7', 190, 262, 'bottom', true, 'T7') +
+      oled(300, 284) + dot(215,140) + dot(300,101) + dot(300,180) + dot(300,262) + dot(400,101) + dot(60,140) + dot(60,262) + dot(215,22) +
+      `<text class="tl" x="356" y="73" text-anchor="middle">S[n]</text><text class="tl" x="248" y="214" text-anchor="middle">${ox ? 'SN[n]' : 'S[n]'}</text>` +
+      `<text class="tl" x="140" y="112" text-anchor="middle">${ox ? 'SN[n−1]' : 'S[n−1]'}</text><text class="tl" x="190" y="296" text-anchor="middle">S[n]</text>` +
+      `<text class="tl" x="274" y="66" text-anchor="end">EM</text><text class="tl" x="274" y="232" text-anchor="end">EM</text>` +
+      `<text class="rl" x="300" y="322" text-anchor="middle">ELVSS</text>` +
+      `<text class="val" id="sv-n1" x="209" y="160" text-anchor="end">N1</text><text class="val d" id="sv-n2" x="292" y="114" text-anchor="end">N2</text>` +
+      `<text class="val i" id="sv-io" x="322" y="304">I</text></svg>`;
+  },
+  lanes(r, p){
+    const ox = r.ox, m = r.m;
+    const annot = [{ta:r.ton + 0.3*(r.toff - r.ton), tb:r.toff, v1:r.vn - r.vth, v2:r.vComp, text:`보상 잔차 ${fx(m.resid*1000,0)} mV`},
+                   {ta:r.toff, tb:r.tEmOn + 0.6*r.H, v1:r.vComp, v2:r.vAft, text:`킥백 ${sg(m.kick*1000,0)} mV`}];
+    const L = [{name: ox ? 'SN[n−1]' : 'S[n−1]', sub: ox ? 'T4 · Oxide (Active-H)' : 'T4 초기화', c:'g2', a:r.s1, u:'V'},
+               {name:'S[n]', sub: ox ? 'T2 · T7 (LTPS)' : 'T2 · T3 · T7', c:'g', a:r.s2, u:'V'}];
+    if (ox) L.push({name:'SN[n]', sub:'T3 · Oxide', c:'g', a:r.s3, u:'V'});
+    L.push({name:'EM', sub:'T5 · T6 발광 제어', c:'em', a:r.em, u:'V'},
+           {name:'Data[m]', sub:`τd ${si(r.td,'s')}`, c:'d', a:r.d, lo:r.dlo, hi:r.dhi, u:'V'},
+           {name:'V_N1', sub:'DT 게이트 (Cst)', c:'px', a:r.v, u:'V', refs:[{v:r.vinit, l:'Vinit'}, {v:r.vn - r.vth, l:'Vdata−|Vth|', c:'d'}], annot},
+           {name:'I_OLED', sub:'발광 전류', c:'cur', a:r.io, u:'A'});
+    return L;
+  },
+  bands(r){ return [{a:-r.H + r.ton, b:-r.oeS, l:'① 초기화', c:'band-i'}, {a:r.ton, b:r.toff, l:'② 기입·보상', c:'band-w'}, {a:r.toff, b:r.tEmOn, l:'③', c:'band-k'}, {a:r.tEmOn, b:r.Tf, l:'④ 발광', c:'band-e'}]; },
+  probe(r, t, p){
+    const ox = r.ox, mid = (p.vgh + p.vgl)/2;
+    const s1 = at(t, r.t, r.s1), s2 = at(t, r.t, r.s2), s3 = at(t, r.t, r.s3), em = at(t, r.t, r.em), d = at(t, r.t, r.d);
+    const v = at(t, r.t, r.v), n2 = at(t, r.t, r.n2), io = at(t, r.t, r.io), ic = at(t, r.t, r.ic), i4 = at(t, r.t, r.i4);
+    const on = {T4: ox ? s1 > mid : s1 < mid, T2: s2 < mid, T7: s2 < mid, T3: ox ? s3 > mid : s2 < mid, T5: em < mid, T6: em < mid, DT: ic > 1e-9 || io > 1e-10};
+    let ph;
+    if (t < r.tEmOff) ph = ['발광 (이전 프레임)', 'EM이 켜져 있고 DT는 이전 프레임에 저장된 Vsg로 전류를 흘립니다.', 'em'];
+    else if (t < -r.H + r.ton) ph = ['EM OFF · 대기', 'T5·T6가 꺼져 OLED 전류가 차단됩니다. 이후 초기화·보상 구간에서 DT 전류가 OLED로 흐르지 않게 하기 위한 준비입니다.', 'g2'];
+    else if (t < -r.oeS) ph = ['① 초기화', 'S[n−1]로 T4가 켜져 N1(DT 게이트)을 Vinit으로 방전합니다. N1을 충분히 낮춰야 다음 구간에서 DT가 강하게 켜져 소스 쪽에서 충전이 시작됩니다.', 'g2'];
+    else if (t < r.ton) ph = ['전환 마진', '초기화 스캔이 꺼지고 n행 데이터가 데이터 라인에 실리는 구간입니다.', 'd'];
+    else if (t < r.toff) ph = ['② 데이터 기입 + Vth 보상', 'T2·T3가 켜져 DT가 다이오드로 연결됩니다. 데이터가 DT 소스(N2)로 들어가고, DT를 통해 흐르는 전류가 N1을 Vdata − |Vth|를 향해 충전합니다. 전류가 Vov²에 비례해 줄어들므로 수렴은 지수가 아닌 쌍곡선 형태입니다. T7은 동시에 애노드를 리셋합니다.', 'd'];
+    else if (t < r.tEmOn) ph = ['③ 스캔 OFF · 킥백', (ox ? 'Oxide T3의 게이트가 하강하며 N1에 음(−)의 킥백' : 'p-type T3의 게이트가 상승하며 N1에 양(+)의 킥백') + '이 걸립니다. 저장된 전압에는 Vth 정보가 들어 있습니다.', 'px'];
+    else ph = ['④ 발광', 'T5·T6가 켜져 DT 소스가 ELVDD로 올라갑니다(N2 상승이 C_DT로 N1에 추가 결합). I = β/2·(ELVDD − Vdata)²로 Vth가 상쇄됩니다. 프레임 동안 T3·T4 누설이 N1을 끌어내립니다.', 'em'];
+    return {ph, on, oled: io/Math.max(r.m.Iid*1.5, 1e-9),
+      sv:{'sv-n1':`N1 ${fx(v)} V`, 'sv-n2':`N2 ${fx(n2,2)} V`, 'sv-io':`${si(io,'A',0)}`},
+      ro:[[ox ? 'SN[n−1]' : 'S[n−1]', `${fx(s1)} V`, 'g2'], ['S[n]', `${fx(s2)} V`, 'g'], ['EM', `${fx(em)} V`, 'em'], ['Data', `${fx(d)} V`, 'd'], ['V_N1', `${fx(v,3)} V`, 'px'], ['V_N2 (근사)', `${fx(n2,2)} V`, null], ['I 보상 (DT→N1)', si(ic,'A'), null], ['I_T4', si(i4,'A'), null], ['I_OLED', si(io,'A'), 'cur']]};
+  },
+  kpis(r, p){
+    const m = r.m;
+    return [
+      {l:'1H · 보상 시간', v:si(r.H,'s').split(' ')[0], u:si(r.H,'s').split(' ')[1], sub:`t_comp ${si(m.tc,'s')}` + (r.skip ? ` · ${r.scanF}Hz 스캔` : '')},
+      {l:'초기화 후 V_N1', v:fx(r.vInitEnd,3), u:'V', s:grade(Math.abs(r.vInitEnd - r.vinit), 0.05, 0.2), sub:`목표 Vinit ${fx(r.vinit,2)} V`},
+      {l:'Vth 보상 잔차', v:fx(m.resid*1000,0), u:'mV', s:grade(Math.abs(m.resid), 0.15, 0.3), sub:`해석식 ${fx(m.uTh*1000,0)} mV (감마로 흡수)`},
+      {l:`ΔI/I @ ΔVth ${fx(p.dVth,2)} V`, v:sgPct(m.sV,2), u:'%', s:Number.isFinite(m.sV) ? grade(Math.abs(m.sV), 0.01, 0.03) : null, sub:`2T1C였다면 ${sgPct(m.sV2,1)} %`},
+      {l:`ΔI/I @ Δµ ${p.dMu}%`, v:sgPct(m.sM,1), u:'%', s:Number.isFinite(m.sM) ? grade(Math.abs(m.sM), p.dMu/100*0.6, p.dMu/100*1.05) : null, sub:`무보상 +${p.dMu}% 대비`},
+      {l:'프레임 내 휘도 변화', v:sgPct(m.drift,2), u:'%', s:Number.isFinite(m.drift) ? grade(Math.abs(m.drift), 0.01, 0.03) : null, sub:`I ${si(r.I0,'A',0)} · Tf ${si(r.Tf,'s')}`},
+    ];
+  },
+  notes(r, p){
+    const m = r.m, vov = p.elvdd - p.vdata;
+    const leakDV = Math.pow(10, p.ioff)/10*((r.vAft - p.vinit) + (r.vAft - (ELVSS + 3)))*r.Tf/r.C;
+    return [
+      {h:'보상 원리', eq:'V<sub>N1</sub> → V<sub>data</sub> − |V<sub>th</sub>|  ⇒  I = (β/2)(ELVDD − V<sub>N1</sub> − |V<sub>th</sub>|)² = (β/2)(ELVDD − V<sub>data</sub>)²', num:`ELVDD − Vdata = ${fx(vov,2)} V → 이상 전류 ${si(m.Iid,'A')}  ·  시뮬레이션 ${si(r.I0,'A')}`, t:'기입 구간에 DT를 다이오드 연결해 자신의 Vth를 N1에 기록해 두고, 발광 구간에서 소스를 ELVDD로 바꾸면 Vth 항이 상쇄됩니다. 시뮬레이션 전류가 이상치와 다른 것은 보상 잔차와 킥백 때문이며, 이 평균 오프셋은 감마 튜닝에서 흡수됩니다. 남는 문제는 화소 간 산포입니다.'},
+      {h:'보상 수렴: 지수가 아닌 쌍곡선', eq:'dV<sub>N1</sub>/dt = (β/2C)·u²  ⇒  u(t) = u<sub>0</sub> / (1 + κu<sub>0</sub>),  κ = βt/2C', num:`u0 = ${fx(m.u0,2)} V, κ = ${fx(m.kap,2)} /V → u = ${fx(m.uTh*1000,0)} mV (해석) · ${fx(m.resid*1000,0)} mV (시뮬레이션)`, t:'다이오드 연결 TFT는 목표에 가까워질수록 전류가 Vov²로 줄어 끝까지 수렴하지 못합니다. u0가 크면 잔차는 ≈ 2C/(βt)로 수렴해 Vth와 거의 무관해집니다(그래서 Vth 보상이 성립). 반대로 잔차가 β에 의존하므로 이동도가 큰 화소는 더 깊이 수렴하고, 이것이 이동도 산포를 일부 상쇄하는 효과로 나타납니다. 1H가 짧은 고해상도·고주사율일수록 잔차가 커집니다.'},
+      {h:'킥백과 결합', eq:'ΔV<sub>N1</sub> = ±C<sub>gs,T3</sub>/C<sub>N1</sub>·ΔV<sub>scan</sub> + C<sub>DT,gs</sub>/C<sub>N1</sub>·(ELVDD − V<sub>N2</sub>)', num:`스캔 OFF ${sg(m.kick3*1000,0)} mV + EM ON ${sg(m.kickEm*1000,0)} mV = ${sg(m.kick*1000,0)} mV  ·  C_N1 ${si(r.C,'F')}`, t:'LTPS p-type T3는 OFF 시 게이트가 상승해 N1을 올리고, LTPO의 Oxide n-type T3는 게이트가 하강해 반대로 내립니다. 발광 시작 시 N2가 Vdata에서 ELVDD로 뛰면 DT의 게이트-소스 커패시턴스로 N1도 같이 올라가는데, 이 성분은 계조(Vdata)에 따라 달라 감마 곡선의 비선형 오차가 됩니다.'},
+      {h:'유지 · LTPO', eq:'ΔV<sub>N1</sub> ≈ (I<sub>T3,off</sub> + I<sub>T4,off</sub>)·T<sub>f</sub> / C<sub>N1</sub>,  ΔI/I ≈ 2ΔV<sub>N1</sub>/V<sub>ov</sub>', num:`Ioff ${exp10(p.ioff)} · Tf ${si(r.Tf,'s')} → ΔV ≈ ${sg(-leakDV*1000,1)} mV · 휘도 ${sgPct(m.drift,2)} %`, t:'N1에 직접 붙은 T3·T4의 누설이 프레임 동안 게이트를 Vinit 쪽으로 끌어내려 p-type DT의 전류를 키웁니다. LTPS 스위치로는 저주파에서 휘도가 크게 흔들리므로, LTPO는 이 두 개만 Oxide로 바꿔 누설을 10⁻¹⁵ A 이하로 낮추고 120Hz 속도로 기입한 뒤 프레임을 건너뛰어 1Hz까지 내립니다. 실제 패널은 스킵 프레임 중 애노드 리셋으로 플리커를 추가 보정합니다.'},
+    ];
+  },
+},
+};
+
+/* ───────── state & UI ───────── */
+const $ = s => document.querySelector(s);
+const state = {mode:'o7', view:'line', cursor:0.42, playing:false, p:{}, preset:{lcd:0, o2:0, o7:0}, res:null, geo:null};
+
+function loadPreset(mode, idx){ state.p = JSON.parse(JSON.stringify(PRESETS[mode][idx].p)); state.preset[mode] = idx; }
+function setMode(m){
+  state.mode = m;
+  document.querySelectorAll('#modeTabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.mode === m ? 'true' : 'false'));
+  const sel = $('#preset'); sel.innerHTML = PRESETS[m].map((x, i) => `<option value="${i}">${x.n}</option>`).join('');
+  sel.value = state.preset[m]; loadPreset(m, state.preset[m]);
+  buildControls(); buildSchem(); recompute();
+  try { localStorage.setItem('pwl-mode', m); } catch(e) {}
+}
+function keyOf(id){ return DEF[id].k || id; }
+function buildControls(){
+  const p = state.p;
+  let h = `<div class="ctl-head"><h2>파라미터</h2><button class="btn" id="reset">프리셋 값으로</button></div>`;
+  for (const [g, ids] of GROUPS[state.mode]){
+    h += `<fieldset><legend>${g}</legend>`;
+    for (const id of ids){
+      const d = DEF[id], k = keyOf(id), v = p[k];
+      if (d.type === 'sel') h += `<div class="c-row"><label for="c-${id}">${d.l}</label><select id="c-${id}" data-k="${k}">${d.o.map(o => `<option value="${o[0]}"${o[0] === v ? ' selected' : ''}>${o[1]}</option>`).join('')}</select></div>`;
+      else if (d.type === 'chk') h += `<label class="c-chk" for="c-${id}"><input type="checkbox" id="c-${id}" data-k="${k}"${v ? ' checked' : ''}><span>${d.l}</span></label>`;
+      else h += `<div class="c-row"><label for="c-${id}"><span>${d.l}</span><output id="o-${id}">${fmtDef(d, v)}</output></label><input type="range" id="c-${id}" data-k="${k}" data-id="${id}" min="${d.min}" max="${d.max}" step="${d.step}" value="${v}"></div>`;
+    }
+    h += `</fieldset>`;
+  }
+  $('#ctl').innerHTML = h;
+  $('#reset').onclick = () => { loadPreset(state.mode, state.preset[state.mode]); buildControls(); buildSchem(); recompute(); };
+}
+function fmtDef(d, v){ if (d.f) return d.f(v); const dec = d.step >= 1 ? 0 : d.step >= 0.1 ? 1 : 2; return `${Number(v).toFixed(dec)}${d.u ? ' ' + d.u : ''}`; }
+$('#ctl').addEventListener('input', e => {
+  const el = e.target, k = el.dataset.k; if (!k) return;
+  let v = el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : parseFloat(el.value);
+  state.p[k] = v;
+  if (el.dataset.id){ const o = $('#o-' + el.dataset.id); if (o) o.textContent = fmtDef(DEF[el.dataset.id], v); }
+  if (k === 'tech'){ state.p.ioff = v === 'ltpo' ? -15.5 : -13; const r = $('#c-ioff'); if (r){ r.value = state.p.ioff; $('#o-ioff').textContent = fmtDef(DEF.ioff, state.p.ioff); } buildSchem(); }
+  schedule();
+});
+let pend = false;
+function schedule(){ if (pend) return; pend = true; requestAnimationFrame(() => { pend = false; recompute(); }); }
+
+function recompute(){
+  const M = MODES[state.mode];
+  try { state.res = M.run(state.p); } catch(err){ console.error(err); return; }
+  renderKPIs(M.kpis(state.res, state.p));
+  renderNotes(M.notes(state.res, state.p));
+  draw(); probe();
+}
+function renderKPIs(list){
+  const lab = {good:'양호', warn:'주의', bad:'부족'};
+  $('#kpis').innerHTML = list.map(k => `<div class="kpi ${k.s || ''}"><div class="kl"><span>${k.l}</span>${k.s ? `<span class="pill ${k.s}">${lab[k.s]}</span>` : ''}</div><div class="kv">${k.v}<small>${k.u || ''}</small></div><div class="ks">${k.sub || ''}</div></div>`).join('');
+}
+function renderNotes(list){
+  $('#notes').innerHTML = list.map(n => `<article class="note"><h3>${n.h}</h3><div class="eq">${n.eq}</div><div class="num">${n.num}</div><p>${n.t}</p></article>`).join('');
+}
+function buildSchem(){ $('#schem').innerHTML = MODES[state.mode].schem(state.p); $('#circTag').textContent = MODES[state.mode].tag; }
+
+/* ───────── scope drawing ───────── */
+function viewRange(r){ return state.view === 'line' ? [r.tA, r.tB] : [r.tA, r.Tf]; }
+function fmtTime(t, view){ return view === 'line' ? `${(t*1e6).toFixed(3)} µs` : `${(t*1e3).toFixed(3)} ms`; }
+function niceTicks(a, b, n){
+  const span = b - a, step0 = span/n, mag = Math.pow(10, Math.floor(Math.log10(step0))), r = step0/mag;
+  const step = (r < 1.5 ? 1 : r < 3.5 ? 2 : r < 7.5 ? 5 : 10)*mag; const out = [];
+  for (let v = Math.ceil(a/step)*step; v <= b + 1e-12; v += step) out.push(v);
+  return out;
+}
+function draw(){
+  const r = state.res; if (!r) return;
+  const M = MODES[state.mode], cv = $('#scope');
+  const W = Math.max(280, cv.parentElement.clientWidth);
+  const cs = getComputedStyle(document.documentElement), C = n => cs.getPropertyValue('--' + n).trim();
+  const lanes = M.lanes(r, state.p);
+  const narrow = W < 600, laneH = narrow ? 56 : 64, top = 24, bot = 28, gl = narrow ? 84 : 122, gr = 10;
+  const Hh = top + bot + lanes.length*laneH;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(W*dpr); cv.height = Math.round(Hh*dpr); cv.style.height = Hh + 'px';
+  const x = cv.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, W, Hh);
+  x.fillStyle = C('surface'); x.fillRect(0, 0, W, Hh);
+  const [t0, t1] = viewRange(r), pw = W - gl - gr, X = t => gl + (t - t0)/(t1 - t0)*pw;
+  state.geo = {gl, pw, t0, t1};
+  const n1 = state.view === 'line' ? r.nw : r.t.length;
+  const mono = '"IBM Plex Mono", ui-monospace, monospace', sans = '"IBM Plex Sans KR", system-ui, sans-serif';
+
+  // phase bands
+  for (const b of M.bands(r)){
+    const a = Math.max(X(b.a), gl), e = Math.min(X(b.b), W - gr); if (e <= a) continue;
+    if (b.c){ x.fillStyle = C(b.c); x.fillRect(a, top, Math.max(e - a, 1), Hh - top - bot); }
+    if (b.l){ x.font = `600 11px ${sans}`; const tw = x.measureText(b.l).width;
+      if (e - a > tw + 6){ x.fillStyle = C('muted'); x.textAlign = 'center'; x.fillText(b.l, (a + e)/2, 15); } }
+  }
+  // grid & axis
+  x.lineWidth = 1; x.font = `500 10.5px ${mono}`; x.fillStyle = C('muted');
+  if (state.view === 'line'){
+    for (let k = -1; k <= 2; k++){
+      const xx = Math.round(X(k*r.H)) + 0.5; x.strokeStyle = C('grid'); x.setLineDash(k === 0 ? [] : [2, 3]);
+      x.beginPath(); x.moveTo(xx, top); x.lineTo(xx, Hh - bot); x.stroke();
+      x.textAlign = 'center'; x.fillText(k === 0 ? '0' : (k < 0 ? '−' : '') + (Math.abs(k) === 1 ? '' : Math.abs(k)) + 'H', xx, Hh - bot + 16);
+    }
+    x.setLineDash([]); x.textAlign = 'left'; x.fillStyle = C('faint'); x.fillText(`1H = ${si(r.H,'s')}`, 8, Hh - bot + 16);
+  } else {
+    for (const tv of niceTicks(0, r.Tf, narrow ? 4 : 8)){
+      const xx = Math.round(X(tv)) + 0.5; x.strokeStyle = C('grid'); x.setLineDash([2, 3]);
+      x.beginPath(); x.moveTo(xx, top); x.lineTo(xx, Hh - bot); x.stroke();
+      x.textAlign = 'center'; x.fillText(si(tv,'s',1).replace(' ', ''), xx, Hh - bot + 16);
+    }
+    x.setLineDash([]); x.textAlign = 'left'; x.fillStyle = C('faint'); x.fillText(`Tf = ${si(r.Tf,'s')}`, 8, Hh - bot + 16);
+  }
+
+  const tc = t0 + state.cursor*(t1 - t0), xc = X(tc);
+  const tags = [];
+  lanes.forEach((L, li) => {
+    const y0 = top + li*laneH, y1 = y0 + laneH, pad = 9;
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < n1; i++){
+      const v = L.a[i]; if (v < mn) mn = v; if (v > mx) mx = v;
+      if (L.lo){ if (L.lo[i] < mn) mn = L.lo[i]; if (L.hi[i] > mx) mx = L.hi[i]; }
+    }
+    const dmn = mn, dmx = mx;
+    (L.refs || []).forEach(rf => { mn = Math.min(mn, rf.v); mx = Math.max(mx, rf.v); });
+    if (mx - mn < 1e-12){ const c = L.u === 'A' ? Math.max(Math.abs(mx), 1e-12) : 0.5; mn -= c; mx += c; }
+    const sp = (mx - mn)*0.1; mn -= sp; mx += sp;
+    const Y = v => y1 - pad - (v - mn)/(mx - mn)*(laneH - 2*pad);
+    // separator
+    x.strokeStyle = C('line'); x.beginPath(); x.moveTo(0, y1 + 0.5); x.lineTo(W, y1 + 0.5); x.stroke();
+    if (li === 0){ x.beginPath(); x.moveTo(0, y0 + 0.5); x.lineTo(W, y0 + 0.5); x.stroke(); }
+    // labels
+    x.textAlign = 'left'; x.fillStyle = C(L.c); x.font = `600 12px ${mono}`; x.fillText(L.name, 8, y0 + 18);
+    if (!narrow){ x.fillStyle = C('faint'); x.font = `400 10.5px ${sans}`; x.fillText(L.sub, 8, y0 + 33); }
+    x.fillStyle = C('faint'); x.font = `500 10px ${mono}`; x.textAlign = 'right';
+    const fv = v => L.u === 'A' ? si(v,'A',1) : fx(v,2);
+    x.fillText(fv(dmx), gl - 6, Math.max(y0 + 12, Y(dmx) + 3));
+    if (dmx - dmn > 1e-12) x.fillText(fv(dmn), gl - 6, Math.min(y1 - 3, Y(dmn) + 3));
+    // refs
+    (L.refs || []).forEach(rf => {
+      x.strokeStyle = C(rf.c || 'faint'); x.globalAlpha = 0.75; x.setLineDash([4, 4]);
+      x.beginPath(); x.moveTo(gl, Y(rf.v)); x.lineTo(W - gr, Y(rf.v)); x.stroke(); x.setLineDash([]); x.globalAlpha = 1;
+      x.fillStyle = C(rf.c || 'faint'); x.font = `500 10px ${mono}`; x.textAlign = 'right'; x.fillText(rf.l, W - gr - 2, Y(rf.v) - 3);
+    });
+    // lo/hi band
+    x.save(); x.beginPath(); x.rect(gl, y0, pw, laneH); x.clip();
+    if (L.lo){
+      x.fillStyle = C(L.c); x.globalAlpha = 0.14; x.beginPath();
+      for (let i = 0; i < n1; i++){ const xx = X(r.t[i]); i ? x.lineTo(xx, Y(L.hi[i])) : x.moveTo(xx, Y(L.hi[i])); }
+      for (let i = n1 - 1; i >= 0; i--) x.lineTo(X(r.t[i]), Y(L.lo[i]));
+      x.closePath(); x.fill(); x.globalAlpha = 1;
+    }
+    // zero line for current
+    if (L.u === 'A' && mn < 0 && mx > 0){ x.strokeStyle = C('grid'); x.beginPath(); x.moveTo(gl, Y(0)); x.lineTo(W - gr, Y(0)); x.stroke(); }
+    // trace
+    x.strokeStyle = C(L.c); x.lineWidth = 1.7; x.lineJoin = 'round'; x.beginPath();
+    for (let i = 0; i < n1; i++){ const xx = X(r.t[i]), yy = Y(L.a[i]); i ? x.lineTo(xx, yy) : x.moveTo(xx, yy); }
+    x.stroke(); x.lineWidth = 1;
+    // annotations
+    if (state.view === 'line' && L.annot){
+      for (const an of L.annot){
+        const xa = X(an.ta), xb = X(an.tb), ya = Y(an.v1), yb = Y(an.v2);
+        x.strokeStyle = C('ink'); x.globalAlpha = 0.55; x.setLineDash([2, 3]);
+        x.beginPath(); x.moveTo(xa, ya); x.lineTo(xb, ya); x.stroke(); x.setLineDash([]); x.globalAlpha = 1;
+        x.strokeStyle = C('ink'); x.beginPath(); x.moveTo(xb, ya); x.lineTo(xb, yb); x.moveTo(xb - 3, ya); x.lineTo(xb + 3, ya); x.moveTo(xb - 3, yb); x.lineTo(xb + 3, yb); x.stroke();
+        x.font = `600 10.5px ${mono}`; const tw = x.measureText(an.text).width;
+        const tx = xb + 6 + tw > W - gr ? xb - 6 - tw : xb + 6, ty = (ya + yb)/2 + 4;
+        x.fillStyle = C('surface'); x.globalAlpha = 0.85; x.fillRect(tx - 2, ty - 11, tw + 4, 14); x.globalAlpha = 1;
+        x.fillStyle = C('ink'); x.textAlign = 'left'; x.fillText(an.text, tx, ty);
+      }
+    }
+    x.restore();
+    // cursor dot + tag
+    const vc = at(tc, r.t, L.a), yc = Y(vc);
+    tags.push({y: yc, y0, y1, c: C(L.c), s: L.u === 'A' ? si(vc,'A',1) : fx(vc,3) + ' V'});
+  });
+  // cursor
+  x.strokeStyle = C('ink'); x.globalAlpha = 0.8; x.beginPath(); x.moveTo(Math.round(xc) + 0.5, top); x.lineTo(Math.round(xc) + 0.5, Hh - bot); x.stroke(); x.globalAlpha = 1;
+  x.font = `600 10.5px ${mono}`;
+  for (const g of tags){
+    x.fillStyle = g.c; x.beginPath(); x.arc(xc, g.y, 3.2, 0, Math.PI*2); x.fill();
+    const tw = x.measureText(g.s).width, right = xc + 8 + tw + 6 < W - gr, tx = right ? xc + 8 : xc - 8 - tw - 6;
+    const ty = Math.min(g.y1 - 4, Math.max(g.y0 + 14, g.y - 7));
+    x.fillStyle = C('surface'); x.strokeStyle = g.c; x.globalAlpha = 0.95;
+    x.fillRect(tx, ty - 11, tw + 6, 15); x.globalAlpha = 1; x.strokeRect(tx + 0.5, ty - 10.5, tw + 5, 14);
+    x.fillStyle = g.c; x.textAlign = 'left'; x.fillText(g.s, tx + 3, ty);
+  }
+  $('#tread').innerHTML = `t = <b>${fmtTime(tc, state.view)}</b>` + (state.view === 'line' ? ` · ${(tc/r.H).toFixed(2)} H` : '');
+}
+
+/* ───────── probe (circuit + readout) ───────── */
+function probe(){
+  const r = state.res; if (!r || !state.geo) return;
+  const {t0, t1} = state.geo, t = t0 + state.cursor*(t1 - t0);
+  const pr = MODES[state.mode].probe(r, t, state.p);
+  const svg = $('#schem');
+  for (const [id, on] of Object.entries(pr.on)){ const g = svg.querySelector('#' + id); if (g) g.classList.toggle('on', !!on); }
+  for (const [id, s] of Object.entries(pr.sv)){ const e = svg.querySelector('#' + id); if (e) e.textContent = s; }
+  const od = svg.querySelector('#oled .dio');
+  if (od){ const k = Math.max(0, Math.min(1, pr.oled || 0)); od.style.fill = k > 0.01 ? 'var(--g)' : ''; od.style.fillOpacity = k > 0.01 ? String(0.15 + 0.85*k) : ''; }
+  $('#phase').innerHTML = `<div class="pt"><i style="background:var(--${pr.ph[2]})"></i>${pr.ph[0]}</div><p>${pr.ph[1]}</p>`;
+  $('#readout').innerHTML = pr.ro.map(([k, v, c]) => `<dt>${c ? `<span class="sw" style="background:var(--${c})"></span>` : ''}${k}</dt><dd>${v}</dd>`).join('');
+}
+
+/* ───────── interaction ───────── */
+const cv = $('#scope');
+function setCursorFromX(clientX){
+  const g = state.geo; if (!g) return;
+  const rect = cv.getBoundingClientRect();
+  state.cursor = Math.max(0, Math.min(1, (clientX - rect.left - g.gl)/g.pw));
+  requestDraw();
+}
+let drawPend = false;
+function requestDraw(){ if (drawPend) return; drawPend = true; requestAnimationFrame(() => { drawPend = false; draw(); probe(); }); }
+cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); stopPlay(); setCursorFromX(e.clientX); });
+cv.addEventListener('pointermove', e => { if (cv.hasPointerCapture(e.pointerId)) setCursorFromX(e.clientX); });
+cv.addEventListener('keydown', e => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault(); stopPlay();
+  const d = (e.shiftKey ? 0.025 : 0.005)*(e.key === 'ArrowLeft' ? -1 : 1);
+  state.cursor = Math.max(0, Math.min(1, state.cursor + d)); requestDraw();
+});
+document.querySelectorAll('#modeTabs button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+$('#preset').addEventListener('change', e => { loadPreset(state.mode, +e.target.value); buildControls(); buildSchem(); recompute(); });
+function setView(v){
+  state.view = v; $('#v-line').setAttribute('aria-pressed', v === 'line'); $('#v-frame').setAttribute('aria-pressed', v === 'frame');
+  state.cursor = v === 'line' ? 0.42 : 0.3; requestDraw();
+}
+$('#v-line').onclick = () => setView('line'); $('#v-frame').onclick = () => setView('frame');
+let lastTs = 0;
+function tick(ts){
+  if (!state.playing) return;
+  const dt = lastTs ? (ts - lastTs)/1000 : 0; lastTs = ts;
+  state.cursor += dt/6; if (state.cursor > 1) state.cursor = 0;
+  draw(); probe(); requestAnimationFrame(tick);
+}
+function stopPlay(){ if (!state.playing) return; state.playing = false; updPlay(); }
+function updPlay(){
+  const b = $('#play'); b.setAttribute('aria-pressed', state.playing);
+  b.querySelector('span').textContent = state.playing ? '정지' : '재생';
+  $('#playIcon').innerHTML = state.playing ? '<path d="M2 1h3v10H2zM7 1h3v10H7z"/>' : '<path d="M2 1l9 5-9 5z"/>';
+}
+$('#play').onclick = () => { state.playing = !state.playing; updPlay(); if (state.playing){ lastTs = 0; requestAnimationFrame(tick); } };
+
+new ResizeObserver(() => requestDraw()).observe(cv.parentElement);
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', requestDraw);
+new MutationObserver(requestDraw).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(requestDraw);
+
+let initMode = 'o7';
+try { const m = localStorage.getItem('pwl-mode'); if (m && MODES[m]) initMode = m; } catch(e) {}
+setMode(initMode);
+</script>
+
+</body></html>
