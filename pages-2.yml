@@ -1,0 +1,55 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 파일별 최종 수정일 표시용
+
+      - name: Build site with auto-generated index
+        run: |
+          mkdir -p _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' ./ _site/
+
+          {
+            echo '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
+            echo '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            echo '<title>자료 목록</title>'
+            echo '<style>body{font-family:system-ui,sans-serif;max-width:720px;margin:40px auto;padding:0 16px;line-height:1.6}li{margin:8px 0}a{text-decoration:none}small{color:#888;margin-left:6px}</style>'
+            echo '</head><body><h1>자료 목록</h1><ul>'
+            find . -name '*.html' -not -path './_site/*' -not -path './.git/*' -not -name 'index.html' | sort | while read -r f; do
+              p="${f#./}"                 # 링크 경로 (예: photo-basics.html)
+              n="$(basename "$p" .html)"  # 표시 이름 = 파일 이름에서 .html 제거
+              d=$(git log -1 --format=%cs -- "$f")
+              echo "<li><a href=\"$p\">$n</a><small>$d</small></li>"
+            done
+            echo '</ul></body></html>'
+          } > _site/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
